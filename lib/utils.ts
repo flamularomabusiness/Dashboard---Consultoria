@@ -13,7 +13,13 @@ import {
   startOfWeek,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import type { Reuniao, StatusReuniao, StatusVisual } from "@/lib/types";
+import type {
+  AgendamentoFixo,
+  AgendamentoFixoSheet,
+  Reuniao,
+  StatusReuniao,
+  StatusVisual,
+} from "@/lib/types";
 
 /** Prazo (em dias) a partir do qual uma reunião sem ATA finalizada é considerada atrasada. */
 export const LIMITE_DIAS_ATRASO = 7;
@@ -151,4 +157,52 @@ export function proximaOcorrenciaDiaSemana(
   const alvo = indiceDiaSemana(diaSemana);
   const diasParaFrente = (alvo - hoje.getDay() + 7) % 7;
   return startOfDay(addDays(hoje, diasParaFrente));
+}
+
+/** Normaliza um horário "HH:MM" para o formato "HH:MM:SS" usado pelo Supabase. */
+export function normalizarHorario(horario: string): string {
+  return horario.length === 5 ? `${horario}:00` : horario;
+}
+
+export interface PlanoSincronizacaoAgendamentos {
+  paraInserir: AgendamentoFixoSheet[];
+  paraAtualizar: Array<{ atual: AgendamentoFixo; novo: AgendamentoFixoSheet }>;
+  semMudanca: AgendamentoFixoSheet[];
+}
+
+/**
+ * Compara os agendamentos fixos vindos da planilha com os já salvos no
+ * Supabase (casando por `cliente_nome`) e decide o que precisa ser inserido,
+ * atualizado (dia/horário mudou) ou já está sincronizado. Não decide nada
+ * sobre clientes que existem no Supabase mas não vieram da planilha —
+ * a sincronização é só "para frente" (Sheets -> Supabase).
+ */
+export function planejarSincronizacaoAgendamentos(
+  daSheet: AgendamentoFixoSheet[],
+  doSupabase: AgendamentoFixo[],
+): PlanoSincronizacaoAgendamentos {
+  const paraInserir: AgendamentoFixoSheet[] = [];
+  const paraAtualizar: PlanoSincronizacaoAgendamentos["paraAtualizar"] = [];
+  const semMudanca: AgendamentoFixoSheet[] = [];
+
+  for (const item of daSheet) {
+    const horario = normalizarHorario(item.horario);
+    const atual = doSupabase.find((a) => a.cliente_nome === item.cliente_nome);
+
+    if (!atual) {
+      paraInserir.push({ ...item, horario });
+      continue;
+    }
+
+    const mudou =
+      atual.dia_semana !== item.dia_semana || normalizarHorario(atual.horario) !== horario;
+
+    if (mudou) {
+      paraAtualizar.push({ atual, novo: { ...item, horario } });
+    } else {
+      semMudanca.push(item);
+    }
+  }
+
+  return { paraInserir, paraAtualizar, semMudanca };
 }

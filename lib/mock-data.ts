@@ -2,7 +2,13 @@
 // Cobrem de propósito todos os status visuais (✅ completa, ⏳ aguardando, 🔴 atrasado)
 // e casos de filtro (sem reunião esta semana, sem nenhuma reunião registrada).
 import { addDays, format, subDays } from "date-fns";
-import type { AgendamentoFixo, Cliente, Consultora, Reuniao } from "@/lib/types";
+import type {
+  AgendamentoFixo,
+  AgendamentoFixoSheet,
+  Cliente,
+  Consultora,
+  Reuniao,
+} from "@/lib/types";
 import { nomeDiaSemana } from "@/lib/utils";
 
 const hoje = new Date();
@@ -70,6 +76,18 @@ export const mockAgendamentosFixos: AgendamentoFixo[] = [
     email_cliente: "construtora@email.com",
   },
 ];
+
+// Mesmos agendamentos fixos, no formato "cru" como viriam da planilha do
+// Google Sheets (sem id/e-mail do Supabase) — usado como fallback quando
+// lib/google-sheets.ts não consegue ler a planilha real.
+export const mockAgendamentosFixosSheet: AgendamentoFixoSheet[] = mockAgendamentosFixos.map(
+  ({ cliente_nome, consultora_id, dia_semana, horario }) => ({
+    cliente_nome,
+    consultora_id: consultora_id ?? "",
+    dia_semana,
+    horario,
+  }),
+);
 
 export const mockReunioes: Reuniao[] = [
   // Ótica Visão Clara: ATA finalizada há 2 dias -> ✅ completa

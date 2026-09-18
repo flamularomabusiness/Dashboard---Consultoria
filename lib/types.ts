@@ -71,6 +71,17 @@ export interface AgendamentoFixo {
   email_cliente: string | null;
 }
 
+/**
+ * Agendamento fixo como vem da planilha (Google Sheets), antes de existir
+ * (ou ser conferido contra) um registro correspondente no Supabase.
+ */
+export interface AgendamentoFixoSheet {
+  cliente_nome: string;
+  consultora_id: string;
+  dia_semana: string;
+  horario: string;
+}
+
 /** Status de compliance semanal de um agendamento fixo. */
 export type StatusSemana = "marcada" | "faltando";
 

@@ -30,12 +30,14 @@ import { ReuniaoModal, type ReuniaoModalMode } from "@/components/ReuniaoModal";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import {
   mockAgendamentosFixos,
+  mockAgendamentosFixosSheet,
   mockClientes,
   mockConsultoras,
   mockReunioes,
 } from "@/lib/mock-data";
 import type {
   AgendamentoFixo,
+  AgendamentoFixoSheet,
   Cliente,
   Consultora,
   LinhaAgendamentoFixo,
@@ -49,6 +51,7 @@ import {
   diasDesde,
   estaNaSemanaAtual,
   formatarData,
+  planejarSincronizacaoAgendamentos,
   proximaOcorrenciaDiaSemana,
   separarUltimaEProximaReuniao,
   statusEfetivo,
@@ -81,17 +84,88 @@ export default function DashboardPage() {
     reuniaoId: null,
   });
 
-  // Carrega clientes (Google Sheets via /api/clientes, com fallback fictício) e
-  // consultoras/reuniões (Supabase quando configurado, senão dados fictícios).
+  /**
+   * Compara os agendamentos fixos da planilha com os do Supabase e grava lá
+   * o que estiver faltando ou desatualizado. Só roda com Supabase configurado
+   * (sem ele não há onde persistir a sincronização). Retorna a lista final
+   * (já refletindo os inserts/updates) para atualizar o estado da tela.
+   */
+  async function sincronizarAgendamentosComSheets(
+    daSheet: AgendamentoFixoSheet[],
+    doSupabase: AgendamentoFixo[],
+  ): Promise<AgendamentoFixo[]> {
+    if (!isSupabaseConfigured || !supabase) return doSupabase;
+
+    const plano = planejarSincronizacaoAgendamentos(daSheet, doSupabase);
+
+    for (const item of plano.paraInserir) {
+      const { error } = await supabase.from("agendamentos_fixos").insert({
+        cliente_nome: item.cliente_nome,
+        consultora_id: item.consultora_id || null,
+        dia_semana: item.dia_semana,
+        horario: item.horario,
+      });
+      if (error) {
+        console.error(`[Sync agendamentos_fixos] Erro ao inserir "${item.cliente_nome}":`, error);
+      } else {
+        console.log(
+          `[Sync agendamentos_fixos] INSERT -> ${item.cliente_nome}: ${item.dia_semana} às ${item.horario}`,
+        );
+      }
+    }
+
+    for (const { atual, novo } of plano.paraAtualizar) {
+      const { error } = await supabase
+        .from("agendamentos_fixos")
+        .update({
+          dia_semana: novo.dia_semana,
+          horario: novo.horario,
+          consultora_id: novo.consultora_id || null,
+        })
+        .eq("id", atual.id);
+      if (error) {
+        console.error(`[Sync agendamentos_fixos] Erro ao atualizar "${atual.cliente_nome}":`, error);
+      } else {
+        console.log(
+          `[Sync agendamentos_fixos] UPDATE -> ${atual.cliente_nome}: ${atual.dia_semana} ${atual.horario} => ${novo.dia_semana} ${novo.horario}`,
+        );
+      }
+    }
+
+    for (const item of plano.semMudanca) {
+      console.log(`[Sync agendamentos_fixos] OK -> ${item.cliente_nome} já sincronizado`);
+    }
+
+    if (plano.paraInserir.length === 0 && plano.paraAtualizar.length === 0) {
+      return doSupabase;
+    }
+
+    const { data: agendamentosAtualizados } = await supabase
+      .from("agendamentos_fixos")
+      .select("*");
+    return agendamentosAtualizados ?? doSupabase;
+  }
+
+  // Carrega clientes e agendamentos fixos (Google Sheets, com fallback fictício),
+  // consultoras/reuniões (Supabase quando configurado, senão dados fictícios) e
+  // sincroniza os agendamentos fixos da planilha para dentro do Supabase.
   React.useEffect(() => {
     async function carregarDados() {
       setCarregando(true);
       try {
-        const respostaClientes = await fetch("/api/clientes");
+        const [respostaClientes, respostaAgendamentosSheet] = await Promise.all([
+          fetch("/api/clientes"),
+          fetch("/api/agendamentos-fixos"),
+        ]);
+
         const clientesCarregados: Cliente[] = respostaClientes.ok
           ? await respostaClientes.json()
           : mockClientes;
         setClientes(clientesCarregados);
+
+        const agendamentosSheet: AgendamentoFixoSheet[] = respostaAgendamentosSheet.ok
+          ? await respostaAgendamentosSheet.json()
+          : mockAgendamentosFixosSheet;
 
         if (isSupabaseConfigured && supabase) {
           const [
@@ -108,7 +182,12 @@ export default function DashboardPage() {
           }
           setConsultoras(consultorasData ?? []);
           setReunioes(reunioesData ?? []);
-          setAgendamentosFixos(agendamentosData ?? []);
+
+          const agendamentosSincronizados = await sincronizarAgendamentosComSheets(
+            agendamentosSheet,
+            agendamentosData ?? [],
+          );
+          setAgendamentosFixos(agendamentosSincronizados);
         } else {
           setConsultoras(mockConsultoras);
           setReunioes(mockReunioes);
