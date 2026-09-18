@@ -18,13 +18,9 @@ export interface Cliente {
 
 /**
  * Estado bruto de uma reunião, como fica salvo no Supabase (tabela "reunioes").
- * Fluxo: agendada -> aguardando_ata -> aguardando_edicao -> finalizada
+ * Fluxo: agendada -> pendente_drive (ATA/resumo do Zoom recebido) -> finalizada
  */
-export type StatusReuniao =
-  | "agendada"
-  | "aguardando_ata"
-  | "aguardando_edicao"
-  | "finalizada";
+export type StatusReuniao = "agendada" | "pendente_drive" | "finalizada";
 
 // Nomes de coluna conferidos contra o schema real do Supabase do projeto
 // (não existe "link_ata": o recebimento da ATA é registrado via e-mail do
@@ -47,7 +43,7 @@ export interface Reuniao {
  * Status visual exibido na tabela principal, derivado de `Reuniao.status`
  * combinado com a quantidade de dias desde a última reunião.
  */
-export type StatusVisual = "completa" | "aguardando" | "atrasado";
+export type StatusVisual = "completa" | "pendente_drive" | "atrasado";
 
 /** Linha calculada exibida na tabela principal: cliente + sua reunião mais relevante. */
 export interface LinhaCliente {

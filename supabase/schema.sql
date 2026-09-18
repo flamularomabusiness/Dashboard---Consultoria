@@ -18,8 +18,12 @@ create table if not exists reunioes (
   cliente_nome text not null,
   consultora_id text references consultoras (id) on delete set null,
   data_reuniao date not null,
+  -- Fluxo: agendada -> pendente_drive (ATA/resumo do Zoom recebido) -> finalizada.
+  -- Observação: a tabela já em produção não tem esse check constraint de fato
+  -- (confirmado via API em 2026-09-18) — ele é só documentação/aspiracional
+  -- para quem rodar este script do zero num projeto novo.
   status text not null default 'agendada'
-    check (status in ('agendada', 'aguardando_ata', 'aguardando_edicao', 'finalizada')),
+    check (status in ('agendada', 'pendente_drive', 'finalizada')),
   -- ATA recebida via e-mail do Zoom (sem link — apenas confirmação + resumo em texto).
   zoom_email_recebido boolean not null default false,
   data_ata_recebida timestamptz,

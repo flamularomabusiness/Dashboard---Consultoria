@@ -3,7 +3,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { AlertCircle, CalendarPlus, CheckCircle2, Clock, Loader2 } from "lucide-react";
+import { AlertCircle, CalendarPlus, CheckCircle2, FolderOpen, Loader2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -54,7 +54,6 @@ import {
   planejarSincronizacaoAgendamentos,
   proximaOcorrenciaDiaSemana,
   separarUltimaEProximaReuniao,
-  statusEfetivo,
 } from "@/lib/utils";
 import { format } from "date-fns";
 
@@ -254,7 +253,7 @@ export default function DashboardPage() {
         acc[linha.statusVisual] += 1;
         return acc;
       },
-      { completa: 0, aguardando: 0, atrasado: 0 } as Record<StatusVisual, number>,
+      { completa: 0, pendente_drive: 0, atrasado: 0 } as Record<StatusVisual, number>,
     );
   }, [linhas]);
 
@@ -336,14 +335,14 @@ export default function DashboardPage() {
   }
 
   async function registrarAtaRecebida(reuniaoId: string, resumo: string) {
-    const status: StatusReuniao = "aguardando_edicao";
+    const status: StatusReuniao = "pendente_drive";
     await atualizarReuniao(reuniaoId, {
       status,
       zoom_email_recebido: true,
       resumo_zoom: resumo || null,
       data_ata_recebida: new Date().toISOString(),
     });
-    toast.success("ATA registrada como recebida. Aguardando edição.");
+    toast.success("ATA registrada como recebida. Pendente Drive.");
   }
 
   async function finalizarReuniao(reuniaoId: string, linkDrive: string) {
@@ -391,9 +390,9 @@ export default function DashboardPage() {
   }
 
   /**
-   * Ações disponíveis por linha, de acordo com o status efetivo da reunião:
-   * - agendada (reunião futura ou já ocorrida aguardando ATA) -> "ATA Recebida" + "Agendar"
-   * - realizada / aguardando edição (ATA já recebida)         -> "Finalizar"
+   * Ações disponíveis por linha, de acordo com o status da reunião:
+   * - agendada (reunião futura ou já ocorrida, ainda sem ATA) -> "ATA Recebida" + "Agendar"
+   * - pendente_drive (ATA/resumo do Zoom já recebido)         -> "Finalizar"
    * - finalizada                                              -> "Ver" (link do Drive) ou "-"
    * - sem nenhuma reunião registrada ainda                    -> só "Agendar"
    */
@@ -401,10 +400,9 @@ export default function DashboardPage() {
     const reuniao = reuniaoParaAcao(linha);
     if (!reuniao) return ["agendar"];
 
-    const status = statusEfetivo(reuniao);
-    if (status === "agendada" || status === "aguardando_ata") return ["ata", "agendar"];
-    if (status === "aguardando_edicao") return ["finalizar"];
-    return ["ver"];
+    if (reuniao.status === "agendada") return ["ata", "agendar"];
+    if (reuniao.status === "finalizada") return ["ver"];
+    return ["finalizar"]; // pendente_drive
   }
 
   /** A planilha só traz o id da consultora; aqui resolvemos o nome para exibição. */
@@ -437,15 +435,15 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-yellow-300 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950/40">
+        <Card className="border-orange-300 bg-orange-50 dark:border-orange-800 dark:bg-orange-950/40">
           <CardHeader className="flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-yellow-800 dark:text-yellow-300">
-              Aguardando ATA
+            <CardTitle className="text-sm font-medium text-orange-800 dark:text-orange-300">
+              Pendente Drive
             </CardTitle>
-            <Clock className="size-5 text-yellow-600 dark:text-yellow-400" />
+            <FolderOpen className="size-5 text-orange-600 dark:text-orange-400" />
           </CardHeader>
-          <CardContent className="text-3xl font-bold text-yellow-900 dark:text-yellow-200">
-            {resumo.aguardando}
+          <CardContent className="text-3xl font-bold text-orange-900 dark:text-orange-200">
+            {resumo.pendente_drive}
           </CardContent>
         </Card>
 
@@ -489,7 +487,7 @@ export default function DashboardPage() {
             <SelectContent>
               <SelectItem value="todos">Todos os status</SelectItem>
               <SelectItem value="completa">✅ Completa</SelectItem>
-              <SelectItem value="aguardando">⏳ Aguardando ATA</SelectItem>
+              <SelectItem value="pendente_drive">📁 Pendente Drive</SelectItem>
               <SelectItem value="atrasado">🔴 Atrasado</SelectItem>
             </SelectContent>
           </Select>

@@ -104,13 +104,13 @@ export const mockReunioes: Reuniao[] = [
     finalizada_em: iso(hoje),
     created_at: iso(subDays(hoje, 2)),
   },
-  // Padaria Pão Dourado: reunião há 3 dias, ATA ainda não chegou -> ⏳ aguardando
+  // Padaria Pão Dourado: reunião há 3 dias, ATA ainda não chegou -> 📁 pendente_drive
   {
     id: "reuniao-2",
     cliente_nome: "Padaria Pão Dourado",
     consultora_id: "consultora-1",
     data_reuniao: iso(subDays(hoje, 3)),
-    status: "aguardando_ata",
+    status: "agendada",
     zoom_email_recebido: false,
     resumo_zoom: null,
     data_ata_recebida: null,
@@ -124,7 +124,7 @@ export const mockReunioes: Reuniao[] = [
     cliente_nome: "Mercado Bom Preço",
     consultora_id: "consultora-2",
     data_reuniao: iso(subDays(hoje, 10)),
-    status: "aguardando_ata",
+    status: "agendada",
     zoom_email_recebido: false,
     resumo_zoom: null,
     data_ata_recebida: null,
@@ -132,13 +132,13 @@ export const mockReunioes: Reuniao[] = [
     finalizada_em: null,
     created_at: iso(subDays(hoje, 10)),
   },
-  // Clínica Vida Saudável: ATA recebida há 1 dia, aguardando edição -> ⏳ aguardando
+  // Clínica Vida Saudável: ATA recebida há 1 dia, pendente Drive -> 📁 pendente_drive
   {
     id: "reuniao-4",
     cliente_nome: "Clínica Vida Saudável",
     consultora_id: "consultora-2",
     data_reuniao: iso(subDays(hoje, 4)),
-    status: "aguardando_edicao",
+    status: "pendente_drive",
     zoom_email_recebido: true,
     resumo_zoom: "Resumo automático do Zoom - reunião 4",
     data_ata_recebida: iso(subDays(hoje, 1)),
@@ -191,13 +191,13 @@ export const mockReunioes: Reuniao[] = [
     finalizada_em: null,
     created_at: iso(hoje),
   },
-  // Escola Sementinha: reunião ontem, ainda dentro do prazo -> ⏳ aguardando
+  // Escola Sementinha: reunião ontem, ainda dentro do prazo -> 📁 pendente_drive
   {
     id: "reuniao-8",
     cliente_nome: "Escola Sementinha",
     consultora_id: "consultora-2",
     data_reuniao: iso(subDays(hoje, 1)),
-    status: "aguardando_ata",
+    status: "agendada",
     zoom_email_recebido: false,
     resumo_zoom: null,
     data_ata_recebida: null,

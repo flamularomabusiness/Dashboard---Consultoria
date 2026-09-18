@@ -6,20 +6,13 @@ import {
   endOfWeek,
   format,
   isAfter,
-  isBefore,
   isWithinInterval,
   parseISO,
   startOfDay,
   startOfWeek,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import type {
-  AgendamentoFixo,
-  AgendamentoFixoSheet,
-  Reuniao,
-  StatusReuniao,
-  StatusVisual,
-} from "@/lib/types";
+import type { AgendamentoFixo, AgendamentoFixoSheet, Reuniao, StatusVisual } from "@/lib/types";
 
 /** Prazo (em dias) a partir do qual uma reunião sem ATA finalizada é considerada atrasada. */
 export const LIMITE_DIAS_ATRASO = 7;
@@ -40,18 +33,12 @@ export function diasDesde(
 }
 
 /**
- * Uma reunião "agendada" cuja data já passou é tratada como já realizada,
- * ainda pendente de ATA — evita a necessidade de um passo manual extra
- * só para marcar que a reunião aconteceu.
+ * Uma reunião "agendada" já é considerada "ocorrida" a partir da sua data
+ * (mesmo sem nenhuma ação manual) — evita a necessidade de um passo extra só
+ * para marcar que a reunião aconteceu antes de poder registrar a ATA.
  */
-export function statusEfetivo(
-  reuniao: Reuniao,
-  hoje: Date = new Date(),
-): StatusReuniao {
-  if (reuniao.status === "agendada" && isBefore(parseISO(reuniao.data_reuniao), hoje)) {
-    return "aguardando_ata";
-  }
-  return reuniao.status;
+function reuniaoJaOcorreu(reuniao: Reuniao, hoje: Date = new Date()): boolean {
+  return reuniao.status !== "agendada" || !isAfter(parseISO(reuniao.data_reuniao), hoje);
 }
 
 /** Dada todas as reuniões de um cliente, separa a última já realizada da próxima agendada. */
@@ -60,11 +47,11 @@ export function separarUltimaEProximaReuniao(
   hoje: Date = new Date(),
 ): { ultimaReuniao: Reuniao | null; proximaReuniao: Reuniao | null } {
   const realizadas = reunioesDoCliente
-    .filter((r) => statusEfetivo(r, hoje) !== "agendada")
+    .filter((r) => reuniaoJaOcorreu(r, hoje))
     .sort((a, b) => b.data_reuniao.localeCompare(a.data_reuniao));
 
   const agendadas = reunioesDoCliente
-    .filter((r) => statusEfetivo(r, hoje) === "agendada")
+    .filter((r) => !reuniaoJaOcorreu(r, hoje))
     .sort((a, b) => a.data_reuniao.localeCompare(b.data_reuniao));
 
   return {
@@ -74,23 +61,22 @@ export function separarUltimaEProximaReuniao(
 }
 
 /**
- * Deriva o status visual (✅/⏳/🔴) a partir da última reunião realizada:
+ * Deriva o status visual (✅ completa / 📁 pendente_drive / 🔴 atrasado) a partir
+ * da última reunião realizada:
  * - Sem reunião registrada, ou atrasada há mais de `LIMITE_DIAS_ATRASO` dias -> atrasado
  * - ATA já finalizada -> completa
- * - Caso contrário -> aguardando (ATA ou edição)
+ * - Caso contrário (ainda sem ATA ou já com ATA, aguardando o link do Drive) -> pendente_drive
  */
 export function calcularStatusVisual(
   ultimaReuniao: Reuniao | null,
   hoje: Date = new Date(),
 ): StatusVisual {
   if (!ultimaReuniao) return "atrasado";
+  if (ultimaReuniao.status === "finalizada") return "completa";
 
   const dias = diasDesde(ultimaReuniao.data_reuniao, hoje) ?? 0;
-  const status = statusEfetivo(ultimaReuniao, hoje);
-
-  if (status === "finalizada") return "completa";
   if (dias > LIMITE_DIAS_ATRASO) return "atrasado";
-  return "aguardando";
+  return "pendente_drive";
 }
 
 /** Verifica se uma data ISO cai dentro da semana atual (segunda a domingo). */

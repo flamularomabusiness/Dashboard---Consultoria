@@ -196,7 +196,7 @@ function ReuniaoModalForm({
 
         {mode === "ata" && (
           <div className="grid gap-2">
-            <Label htmlFor="resumo-zoom">Resumo do e-mail do Zoom (opcional)</Label>
+            <Label htmlFor="resumo-zoom">Resumo do Email do Zoom (opcional)</Label>
             <Textarea
               id="resumo-zoom"
               placeholder="Cole aqui o resumo recebido por e-mail, se houver..."
@@ -208,9 +208,7 @@ function ReuniaoModalForm({
 
         {mode === "finalizar" && (
           <div className="grid gap-2">
-            <Label htmlFor="link-final">
-              Link do arquivo final no Drive (Word + PDF)
-            </Label>
+            <Label htmlFor="link-final">Link do Drive (Word + PDF)</Label>
             <Input
               id="link-final"
               type="url"
