@@ -6,6 +6,7 @@ import type {
   AgendamentoFixo,
   AgendamentoFixoSheet,
   Cliente,
+  ClienteCRM,
   Consultora,
   Reuniao,
 } from "@/lib/types";
@@ -29,6 +30,69 @@ export const mockClientes: Cliente[] = [
   { cliente_nome: "Studio Fitness Now", consultora_id: "consultora-3" },
   { cliente_nome: "Advocacia Martins & Silva", consultora_id: "consultora-1" },
   { cliente_nome: "Escola Sementinha", consultora_id: "consultora-2" },
+];
+
+// Clientes fictícios da página /clientes (tabela Supabase "clientes"), reaproveitando
+// os mesmos nomes de mockClientes/mockReunioes para que a lista de "Últimas Reuniões"
+// do hover card já apareça preenchida nos dados de teste.
+// Datas de início de contrato variadas de propósito, para exercitar os 3 estados de
+// marco (hoje, concluído, pendente) e o caso sem data ainda cadastrada.
+export const mockClientesCRM: ClienteCRM[] = [
+  {
+    id: "cliente-1",
+    nome_razao_social: "Ótica Visão Clara",
+    cpf_cnpj_responsavel: "12.345.678/0001-90",
+    email_responsavel: "contato@oticavisaoclara.com.br",
+    status: "ATIVO",
+    faturamento_medio: 45000,
+    data_criacao: iso(subDays(hoje, 95)),
+    data_inicio_contrato: iso(subDays(hoje, 90)), // marco de 3 meses: HOJE
+    consultora_id: "consultora-1",
+  },
+  {
+    id: "cliente-2",
+    nome_razao_social: "Padaria Pão Dourado",
+    cpf_cnpj_responsavel: "23.456.789/0001-01",
+    email_responsavel: "financeiro@paodourado.com.br",
+    status: "ATIVO",
+    faturamento_medio: 28000,
+    data_criacao: iso(subDays(hoje, 35)),
+    data_inicio_contrato: iso(subDays(hoje, 30)), // marco de 30 dias: HOJE
+    consultora_id: "consultora-1",
+  },
+  {
+    id: "cliente-3",
+    nome_razao_social: "Mercado Bom Preço",
+    cpf_cnpj_responsavel: "34.567.890/0001-12",
+    email_responsavel: "adm@mercadobompreco.com.br",
+    status: "INADIMPLENTE",
+    faturamento_medio: 120000,
+    data_criacao: iso(subDays(hoje, 150)),
+    data_inicio_contrato: iso(subDays(hoje, 145)), // todos os marcos concluídos
+    consultora_id: "consultora-2",
+  },
+  {
+    id: "cliente-4",
+    nome_razao_social: "Clínica Vida Saudável",
+    cpf_cnpj_responsavel: "45.678.901/0001-23",
+    email_responsavel: "recepcao@vidasaudavel.com.br",
+    status: "ATIVO",
+    faturamento_medio: 62000,
+    data_criacao: iso(subDays(hoje, 10)),
+    data_inicio_contrato: iso(subDays(hoje, 8)), // marco de 30 dias: pendente
+    consultora_id: "consultora-2",
+  },
+  {
+    id: "cliente-5",
+    nome_razao_social: "Construtora Alicerce",
+    cpf_cnpj_responsavel: "56.789.012/0001-34",
+    email_responsavel: "diretoria@alicerceconstrutora.com.br",
+    status: "INATIVO",
+    faturamento_medio: null,
+    data_criacao: iso(hoje),
+    data_inicio_contrato: null, // ainda não iniciado
+    consultora_id: null,
+  },
 ];
 
 // Horários fixos/recorrentes de 5 clientes, um por dia entre hoje e os próximos

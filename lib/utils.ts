@@ -23,6 +23,12 @@ export function formatarData(dataISO: string | null | undefined): string {
   return format(parseISO(dataISO), "dd/MM/yyyy", { locale: ptBR });
 }
 
+/** Formata um valor numérico como moeda BRL (ex.: "R$ 45.000,00"). Retorna "-" se nulo. */
+export function formatarMoedaBR(valor: number | null | undefined): string {
+  if (valor === null || valor === undefined) return "-";
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(valor);
+}
+
 /** Calcula quantos dias já se passaram desde `dataISO` até hoje (null se não houver data). */
 export function diasDesde(
   dataISO: string | null | undefined,

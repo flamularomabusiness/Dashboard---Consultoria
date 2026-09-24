@@ -52,6 +52,24 @@ create table if not exists agendamentos_fixos (
 
 create index if not exists agendamentos_fixos_cliente_nome_idx on agendamentos_fixos (cliente_nome);
 
+-- Cadastro comercial/contratual de clientes, usado pela página /clientes.
+-- Documentado a partir da descrição do schema já existente no Supabase (2026-09-24) —
+-- não confundir com a lista de clientes do Google Sheets usada no dashboard de reuniões
+-- (tabela "reunioes.cliente_nome"), que não tem chave em comum com esta tabela ainda.
+create table if not exists clientes (
+  id uuid primary key default gen_random_uuid(),
+  nome_razao_social text not null,
+  cpf_cnpj_responsavel text,
+  email_responsavel text,
+  status text not null default 'ATIVO'
+    check (status in ('ATIVO', 'INATIVO', 'INADIMPLENTE')),
+  faturamento_medio numeric,
+  data_criacao timestamptz not null default now(),
+  -- Podem ficar vazios até o onboarding do cliente ser concluído.
+  data_inicio_contrato date,
+  consultora_id text references consultoras (id) on delete set null
+);
+
 -- Dados iniciais de exemplo (opcional) — ajuste os ids para bater com os
 -- valores de consultora_id usados na sua planilha de clientes.
 insert into consultoras (id, nome) values

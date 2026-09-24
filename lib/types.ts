@@ -54,6 +54,27 @@ export interface LinhaCliente {
   statusVisual: StatusVisual;
 }
 
+/** Status comercial/contratual de um cliente (tabela Supabase "clientes"). */
+export type StatusCliente = "ATIVO" | "INATIVO" | "INADIMPLENTE";
+
+/**
+ * Cliente cadastrado no Supabase (tabela "clientes"): cadastro comercial/contratual
+ * usado pela página /clientes. Não confundir com `Cliente` acima, que vem do Google
+ * Sheets e representa a lista de clientes acompanhados no dashboard de reuniões —
+ * as duas fontes ainda não têm uma chave em comum.
+ */
+export interface ClienteCRM {
+  id: string;
+  nome_razao_social: string;
+  cpf_cnpj_responsavel: string;
+  email_responsavel: string;
+  status: StatusCliente;
+  faturamento_medio: number | null;
+  data_criacao: string; // timestamp ISO
+  data_inicio_contrato: string | null; // data ISO (yyyy-MM-dd)
+  consultora_id: string | null;
+}
+
 /**
  * Horário fixo/recorrente de reunião de um cliente (tabela Supabase "agendamentos_fixos").
  * `dia_semana` vem em português (ex.: "segunda", "terça", ... "sábado", "domingo").
