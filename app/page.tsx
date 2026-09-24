@@ -86,8 +86,11 @@ export default function DashboardPage() {
   /**
    * Compara os agendamentos fixos da planilha com os do Supabase e grava lá
    * o que estiver faltando ou desatualizado. Só roda com Supabase configurado
-   * (sem ele não há onde persistir a sincronização). Retorna a lista final
-   * (já refletindo os inserts/updates) para atualizar o estado da tela.
+   * (sem ele não há onde persistir a sincronização) — o chamador também só
+   * invoca esta função quando `daSheet` veio mesmo da planilha real (nunca com
+   * fallback fictício), para nunca gravar dados de teste no Supabase.
+   * Retorna a lista final (já refletindo os inserts/updates) para atualizar o
+   * estado da tela.
    */
   async function sincronizarAgendamentosComSheets(
     daSheet: AgendamentoFixoSheet[],
@@ -162,9 +165,10 @@ export default function DashboardPage() {
           : mockClientes;
         setClientes(clientesCarregados);
 
-        const agendamentosSheet: AgendamentoFixoSheet[] = respostaAgendamentosSheet.ok
-          ? await respostaAgendamentosSheet.json()
-          : mockAgendamentosFixosSheet;
+        const agendamentosSheetPayload: { configurado: boolean; agendamentos: AgendamentoFixoSheet[] } =
+          respostaAgendamentosSheet.ok
+            ? await respostaAgendamentosSheet.json()
+            : { configurado: false, agendamentos: mockAgendamentosFixosSheet };
 
         if (isSupabaseConfigured && supabase) {
           const [
@@ -182,10 +186,14 @@ export default function DashboardPage() {
           setConsultoras(consultorasData ?? []);
           setReunioes(reunioesData ?? []);
 
-          const agendamentosSincronizados = await sincronizarAgendamentosComSheets(
-            agendamentosSheet,
-            agendamentosData ?? [],
-          );
+          // Só sincroniza (grava no Supabase) quando a planilha real está
+          // configurada — nunca com o fallback fictício de mock-data.ts.
+          const agendamentosSincronizados = agendamentosSheetPayload.configurado
+            ? await sincronizarAgendamentosComSheets(
+                agendamentosSheetPayload.agendamentos,
+                agendamentosData ?? [],
+              )
+            : (agendamentosData ?? []);
           setAgendamentosFixos(agendamentosSincronizados);
         } else {
           setConsultoras(mockConsultoras);
