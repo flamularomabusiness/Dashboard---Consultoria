@@ -101,7 +101,9 @@ export default function ClientesPage() {
             // aparecer neste painel de clientes.
             supabase
               .from("contratos")
-              .select("id,cliente_id,status,contexto_perfil_cliente,produtos!inner(nome)")
+              .select(
+                "id,cliente_id,status,contexto_perfil_cliente,consultora_id,produtos!inner(nome)",
+              )
               .in("produtos.nome", PRODUTOS_PERMITIDOS),
           ]);
           if (erroClientes || erroConsultoras || erroReunioes || erroContratos) {
@@ -112,6 +114,7 @@ export default function ClientesPage() {
             cliente_id: c.cliente_id,
             status: c.status,
             contexto_perfil_cliente: c.contexto_perfil_cliente,
+            consultora_id: c.consultora_id,
             produtoNome: (c.produtos as unknown as { nome: string } | null)?.nome ?? null,
           }));
           setClientes(filtrarClientesPermitidos(clientesData ?? [], contratosPermitidos));
@@ -139,9 +142,9 @@ export default function ClientesPage() {
     carregarDados();
   }, []);
 
-  function consultoraDoCliente(consultoraId: string | null): Consultora | null {
-    if (!consultoraId) return null;
-    return consultoras.find((c) => c.id === consultoraId) ?? null;
+  function consultoraDoContrato(contrato: Contrato | null): Consultora | null {
+    if (!contrato?.consultora_id) return null;
+    return consultoras.find((c) => c.id === contrato.consultora_id) ?? null;
   }
 
   /** Últimas 3 reuniões do cliente (mais recente primeiro), casando por nome. */
@@ -152,7 +155,11 @@ export default function ClientesPage() {
       .slice(0, 3);
   }
 
-  /** Contrato ativo do cliente (hoje, um cliente tem no máximo um). */
+  /**
+   * Contrato ativo do cliente (hoje, um cliente tem no máximo um). É dele, não
+   * de `cliente.consultora_id` (nunca preenchido pela plataforma), que vem a
+   * consultora responsável exibida na tabela e no modal.
+   */
   function contratoDoCliente(cliente: ClienteCRM): Contrato | null {
     return (
       contratos.find((c) => c.cliente_id === cliente.id && c.status === "ativo") ??
@@ -164,14 +171,18 @@ export default function ClientesPage() {
   const clientesFiltrados = React.useMemo(() => {
     return clientes.filter((cliente) => {
       if (filtroStatus !== "todos" && cliente.status !== filtroStatus) return false;
-      if (filtroConsultora !== "todas" && cliente.consultora_id !== filtroConsultora) return false;
+      if (filtroConsultora !== "todas") {
+        const contrato = contratoDoCliente(cliente);
+        if (contrato?.consultora_id !== filtroConsultora) return false;
+      }
       if (apenasMarcoHoje) {
         const marco = calcularProximoMarco(cliente.data_inicio_contrato);
         if (marco.cor !== "amarelo") return false;
       }
       return true;
     });
-  }, [clientes, filtroStatus, filtroConsultora, apenasMarcoHoje]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientes, contratos, filtroStatus, filtroConsultora, apenasMarcoHoje]);
 
   function limparFiltros() {
     setFiltroStatus("todos");
@@ -277,7 +288,7 @@ export default function ClientesPage() {
 
               {!carregando &&
                 clientesFiltrados.map((cliente) => {
-                  const consultora = consultoraDoCliente(cliente.consultora_id);
+                  const consultora = consultoraDoContrato(contratoDoCliente(cliente));
                   const ultimasReunioes = ultimasReunioesDoCliente(cliente);
                   const marco = calcularProximoMarco(cliente.data_inicio_contrato);
 
@@ -344,7 +355,7 @@ export default function ClientesPage() {
 
       <ClienteModal
         cliente={clienteDetalhes}
-        consultora={consultoraDoCliente(clienteDetalhes?.consultora_id ?? null)}
+        consultora={consultoraDoContrato(clienteDetalhes ? contratoDoCliente(clienteDetalhes) : null)}
         contrato={clienteDetalhes ? contratoDoCliente(clienteDetalhes) : null}
         ultimasReunioes={clienteDetalhes ? ultimasReunioesDoCliente(clienteDetalhes) : []}
         open={modalAberto}

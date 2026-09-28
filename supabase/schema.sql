@@ -67,6 +67,10 @@ create table if not exists clientes (
   data_criacao timestamptz not null default now(),
   -- Podem ficar vazios até o onboarding do cliente ser concluído.
   data_inicio_contrato date,
+  -- NÃO USADA pelo app (nunca preenchida pela plataforma de mensalidades) — a
+  -- consultora responsável exibida em /clientes vem, na verdade, de
+  -- contratos.consultora_id (ver comentário abaixo). Descoberto em 2026-09-28,
+  -- junto com o perfil_contexto abaixo.
   consultora_id text references consultoras (id) on delete set null,
   -- NÃO USADA pelo app (deixada aqui só porque já existe na tabela real) — o
   -- texto de "Perfil / Contexto" exibido em /clientes vem, na verdade, de
@@ -85,6 +89,9 @@ create table if not exists clientes (
 --   id uuid, cliente_id uuid references clientes(id), status text,
 --   contexto_perfil_cliente text  -- é AQUI que fica o texto de "Contexto e
 --     Perfil do Cliente" que a plataforma de mensalidades edita.
+--   consultora_id uuid  -- é AQUI (não em clientes.consultora_id) que fica a
+--     consultora responsável — mesmos ids da tabela "consultoras" deste app,
+--     sem FK declarada entre as duas (tabelas de projetos diferentes).
 --   produto_id uuid references produtos(id)
 --
 -- produtos (relevante pra este app):

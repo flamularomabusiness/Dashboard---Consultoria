@@ -97,11 +97,13 @@ export const mockClientesCRM: ClienteCRM[] = [
 ];
 
 // Contratos fictícios (tabela "contratos" da plataforma de mensalidades) — é daqui,
-// via `contexto_perfil_cliente`, que vem o texto exibido no card "Perfil / Contexto"
-// do modal de detalhes. Todos com produto permitido (CONSULTORIA FINANCEIRA ou
-// CONSULTORIA GREEN+, ver PRODUTOS_PERMITIDOS em app/clientes/page.tsx), senão o
-// cliente ficaria de fora da lista já no mock. Só cliente-1 e cliente-3 têm
-// contexto preenchido, pra exercitar tanto o texto quanto o placeholder.
+// via `contexto_perfil_cliente` e `consultora_id`, que vêm o texto do card "Perfil /
+// Contexto" e a consultora responsável exibidos no modal de detalhes (nenhum dos
+// dois é preenchido em `clientes` pela plataforma). Todos com produto permitido
+// (CONSULTORIA FINANCEIRA ou CONSULTORIA GREEN+, ver PRODUTOS_PERMITIDOS em
+// app/clientes/page.tsx), senão o cliente ficaria de fora da lista já no mock. Só
+// cliente-1 e cliente-3 têm contexto preenchido, pra exercitar tanto o texto quanto
+// o placeholder.
 export const mockContratos: Contrato[] = [
   {
     id: "contrato-1",
@@ -109,6 +111,7 @@ export const mockContratos: Contrato[] = [
     status: "ativo",
     contexto_perfil_cliente:
       "Cliente exigente com prazos, prefere reuniões pela manhã. Sócio principal é o ponto de contato.",
+    consultora_id: "consultora-1",
     produtoNome: "CONSULTORIA FINANCEIRA",
   },
   {
@@ -116,6 +119,7 @@ export const mockContratos: Contrato[] = [
     cliente_id: "cliente-2",
     status: "ativo",
     contexto_perfil_cliente: null,
+    consultora_id: "consultora-1",
     produtoNome: "CONSULTORIA FINANCEIRA",
   },
   {
@@ -123,6 +127,7 @@ export const mockContratos: Contrato[] = [
     cliente_id: "cliente-3",
     status: "ativo",
     contexto_perfil_cliente: "Histórico de atraso em pagamentos. Acompanhar de perto o financeiro.",
+    consultora_id: "consultora-2",
     produtoNome: "CONSULTORIA GREEN+",
   },
   {
@@ -130,6 +135,7 @@ export const mockContratos: Contrato[] = [
     cliente_id: "cliente-4",
     status: "ativo",
     contexto_perfil_cliente: null,
+    consultora_id: "consultora-2",
     produtoNome: "CONSULTORIA FINANCEIRA",
   },
   {
@@ -137,6 +143,7 @@ export const mockContratos: Contrato[] = [
     cliente_id: "cliente-5",
     status: "ativo",
     contexto_perfil_cliente: null,
+    consultora_id: null,
     produtoNome: "CONSULTORIA GREEN+",
   },
 ];
