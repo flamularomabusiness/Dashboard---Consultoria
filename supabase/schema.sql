@@ -67,7 +67,10 @@ create table if not exists clientes (
   data_criacao timestamptz not null default now(),
   -- Podem ficar vazios até o onboarding do cliente ser concluído.
   data_inicio_contrato date,
-  consultora_id text references consultoras (id) on delete set null
+  consultora_id text references consultoras (id) on delete set null,
+  -- Texto livre com contexto/perfil do cliente, preenchido manualmente pela
+  -- consultora (exibido em destaque no modal de detalhes de /clientes).
+  perfil_contexto text
 );
 
 -- Dados iniciais de exemplo (opcional) — ajuste os ids para bater com os

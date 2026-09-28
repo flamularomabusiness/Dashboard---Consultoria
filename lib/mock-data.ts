@@ -48,6 +48,8 @@ export const mockClientesCRM: ClienteCRM[] = [
     data_criacao: iso(subDays(hoje, 95)),
     data_inicio_contrato: iso(subDays(hoje, 90)), // marco de 3 meses: HOJE
     consultora_id: "consultora-1",
+    perfil_contexto:
+      "Cliente exigente com prazos, prefere reuniões pela manhã. Sócio principal é o ponto de contato.",
   },
   {
     id: "cliente-2",
@@ -59,6 +61,7 @@ export const mockClientesCRM: ClienteCRM[] = [
     data_criacao: iso(subDays(hoje, 35)),
     data_inicio_contrato: iso(subDays(hoje, 30)), // marco de 30 dias: HOJE
     consultora_id: "consultora-1",
+    perfil_contexto: null, // ainda não preenchido, pra testar o placeholder
   },
   {
     id: "cliente-3",
@@ -70,6 +73,7 @@ export const mockClientesCRM: ClienteCRM[] = [
     data_criacao: iso(subDays(hoje, 150)),
     data_inicio_contrato: iso(subDays(hoje, 145)), // todos os marcos concluídos
     consultora_id: "consultora-2",
+    perfil_contexto: "Histórico de atraso em pagamentos. Acompanhar de perto o financeiro.",
   },
   {
     id: "cliente-4",
@@ -81,6 +85,7 @@ export const mockClientesCRM: ClienteCRM[] = [
     data_criacao: iso(subDays(hoje, 10)),
     data_inicio_contrato: iso(subDays(hoje, 8)), // marco de 30 dias: pendente
     consultora_id: "consultora-2",
+    perfil_contexto: null,
   },
   {
     id: "cliente-5",
@@ -92,6 +97,7 @@ export const mockClientesCRM: ClienteCRM[] = [
     data_criacao: iso(hoje),
     data_inicio_contrato: null, // ainda não iniciado
     consultora_id: null,
+    perfil_contexto: null,
   },
 ];
 

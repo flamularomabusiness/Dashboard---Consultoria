@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusClienteBadge } from "@/components/StatusClienteBadge";
 import type { ClienteCRM, Consultora, Reuniao } from "@/lib/types";
 import { formatarData, formatarMoedaBR } from "@/lib/utils";
@@ -68,6 +69,19 @@ export function ClienteModal({
             {marco.emoji} {marco.texto}
           </dd>
         </dl>
+
+        <Card size="sm">
+          <CardHeader>
+            <CardTitle>Perfil / Contexto</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm whitespace-pre-wrap text-foreground">
+              {cliente.perfil_contexto || (
+                <span className="text-muted-foreground italic">Perfil não informado</span>
+              )}
+            </p>
+          </CardContent>
+        </Card>
 
         <div className="flex flex-col gap-2 border-t pt-3">
           <p className="text-sm font-medium">Últimas Reuniões</p>

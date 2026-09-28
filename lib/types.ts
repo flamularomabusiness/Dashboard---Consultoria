@@ -73,6 +73,8 @@ export interface ClienteCRM {
   data_criacao: string; // timestamp ISO
   data_inicio_contrato: string | null; // data ISO (yyyy-MM-dd)
   consultora_id: string | null;
+  /** Texto livre com contexto/perfil do cliente, preenchido manualmente pela consultora. */
+  perfil_contexto: string | null;
 }
 
 /**
