@@ -39,14 +39,18 @@ import { calcularProximoMarco, type CorMarco } from "@/lib/calcular-marcos";
 // da ROMA 35 etc.) não são consultoria e ficam de fora deste painel.
 const PRODUTOS_PERMITIDOS = ["CONSULTORIA FINANCEIRA", "CONSULTORIA GREEN+"];
 
-/** Clientes cujo contrato é de um dos produtos permitidos (ver PRODUTOS_PERMITIDOS). */
+/**
+ * Clientes que devem aparecer no painel: contrato de um dos produtos permitidos
+ * (ver PRODUTOS_PERMITIDOS) e status diferente de "INATIVO" — cliente inativo
+ * não interessa aqui, só Ativo (e Inadimplente, pra acompanhar cobrança).
+ */
 function filtrarClientesPermitidos(clientesTodos: ClienteCRM[], contratosTodos: Contrato[]) {
   const idsPermitidos = new Set(
     contratosTodos
       .filter((c) => PRODUTOS_PERMITIDOS.includes(c.produtoNome ?? ""))
       .map((c) => c.cliente_id),
   );
-  return clientesTodos.filter((c) => idsPermitidos.has(c.id));
+  return clientesTodos.filter((c) => idsPermitidos.has(c.id) && c.status !== "INATIVO");
 }
 
 const CORES_MARCO: Record<CorMarco, string> = {
@@ -83,7 +87,11 @@ export default function ClientesPage() {
             { data: reunioesData, error: erroReunioes },
             { data: contratosData, error: erroContratos },
           ] = await Promise.all([
-            supabase.from("clientes").select("*").order("data_criacao", { ascending: false }),
+            supabase
+              .from("clientes")
+              .select("*")
+              .neq("status", "INATIVO")
+              .order("data_criacao", { ascending: false }),
             supabase.from("consultoras").select("*"),
             supabase.from("reunioes").select("*"),
             // "contratos"/"produtos" são da plataforma de mensalidades (mesmo Supabase),
@@ -198,7 +206,6 @@ export default function ClientesPage() {
             <SelectContent>
               <SelectItem value="todos">Todos os status</SelectItem>
               <SelectItem value="ATIVO">Ativo</SelectItem>
-              <SelectItem value="INATIVO">Inativo</SelectItem>
               <SelectItem value="INADIMPLENTE">Inadimplente</SelectItem>
             </SelectContent>
           </Select>
