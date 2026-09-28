@@ -34,6 +34,21 @@ import type { ClienteCRM, Consultora, Contrato, Reuniao, StatusCliente } from "@
 import { formatarData } from "@/lib/utils";
 import { calcularProximoMarco, type CorMarco } from "@/lib/calcular-marcos";
 
+// Produtos (une ROMA 20 / YMPULS 46) cujos clientes aparecem em /clientes —
+// os demais produtos da plataforma de mensalidades (EXTRAS, HOLDING, cursos
+// da ROMA 35 etc.) não são consultoria e ficam de fora deste painel.
+const PRODUTOS_PERMITIDOS = ["CONSULTORIA FINANCEIRA", "CONSULTORIA GREEN+"];
+
+/** Clientes cujo contrato é de um dos produtos permitidos (ver PRODUTOS_PERMITIDOS). */
+function filtrarClientesPermitidos(clientesTodos: ClienteCRM[], contratosTodos: Contrato[]) {
+  const idsPermitidos = new Set(
+    contratosTodos
+      .filter((c) => PRODUTOS_PERMITIDOS.includes(c.produtoNome ?? ""))
+      .map((c) => c.cliente_id),
+  );
+  return clientesTodos.filter((c) => idsPermitidos.has(c.id));
+}
+
 const CORES_MARCO: Record<CorMarco, string> = {
   amarelo:
     "bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-950 dark:text-yellow-300 dark:border-yellow-800",
@@ -73,27 +88,30 @@ export default function ClientesPage() {
             supabase.from("reunioes").select("*"),
             // "contratos"/"produtos" são da plataforma de mensalidades (mesmo Supabase),
             // não deste app — é lá que mora `contexto_perfil_cliente`, não em "clientes".
+            // !inner + .in(produtos.nome) filtra só contratos de CONSULTORIA FINANCEIRA
+            // (ROMA 20) / CONSULTORIA GREEN+ (YMPULS 46) — os únicos produtos que devem
+            // aparecer neste painel de clientes.
             supabase
               .from("contratos")
-              .select("id,cliente_id,status,contexto_perfil_cliente,produtos(nome)"),
+              .select("id,cliente_id,status,contexto_perfil_cliente,produtos!inner(nome)")
+              .in("produtos.nome", PRODUTOS_PERMITIDOS),
           ]);
           if (erroClientes || erroConsultoras || erroReunioes || erroContratos) {
             throw erroClientes ?? erroConsultoras ?? erroReunioes ?? erroContratos;
           }
-          setClientes(clientesData ?? []);
+          const contratosPermitidos = (contratosData ?? []).map((c) => ({
+            id: c.id,
+            cliente_id: c.cliente_id,
+            status: c.status,
+            contexto_perfil_cliente: c.contexto_perfil_cliente,
+            produtoNome: (c.produtos as unknown as { nome: string } | null)?.nome ?? null,
+          }));
+          setClientes(filtrarClientesPermitidos(clientesData ?? [], contratosPermitidos));
           setConsultoras(consultorasData ?? []);
           setReunioes(reunioesData ?? []);
-          setContratos(
-            (contratosData ?? []).map((c) => ({
-              id: c.id,
-              cliente_id: c.cliente_id,
-              status: c.status,
-              contexto_perfil_cliente: c.contexto_perfil_cliente,
-              produtoNome: (c.produtos as unknown as { nome: string } | null)?.nome ?? null,
-            })),
-          );
+          setContratos(contratosPermitidos);
         } else {
-          setClientes(mockClientesCRM);
+          setClientes(filtrarClientesPermitidos(mockClientesCRM, mockContratos));
           setConsultoras(mockConsultoras);
           setReunioes(mockReunioes);
           setContratos(mockContratos);
@@ -101,7 +119,7 @@ export default function ClientesPage() {
       } catch (erro) {
         console.error("Erro ao carregar clientes:", erro);
         toast.error("Não foi possível carregar os dados reais. Exibindo dados fictícios.");
-        setClientes(mockClientesCRM);
+        setClientes(filtrarClientesPermitidos(mockClientesCRM, mockContratos));
         setConsultoras(mockConsultoras);
         setReunioes(mockReunioes);
         setContratos(mockContratos);

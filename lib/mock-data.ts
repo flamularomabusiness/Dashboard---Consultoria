@@ -98,8 +98,10 @@ export const mockClientesCRM: ClienteCRM[] = [
 
 // Contratos fictícios (tabela "contratos" da plataforma de mensalidades) — é daqui,
 // via `contexto_perfil_cliente`, que vem o texto exibido no card "Perfil / Contexto"
-// do modal de detalhes. Só o cliente-1 e o cliente-3 têm contexto preenchido, pra
-// exercitar tanto o texto quanto o placeholder "Perfil não informado".
+// do modal de detalhes. Todos com produto permitido (CONSULTORIA FINANCEIRA ou
+// CONSULTORIA GREEN+, ver PRODUTOS_PERMITIDOS em app/clientes/page.tsx), senão o
+// cliente ficaria de fora da lista já no mock. Só cliente-1 e cliente-3 têm
+// contexto preenchido, pra exercitar tanto o texto quanto o placeholder.
 export const mockContratos: Contrato[] = [
   {
     id: "contrato-1",
@@ -121,7 +123,21 @@ export const mockContratos: Contrato[] = [
     cliente_id: "cliente-3",
     status: "ativo",
     contexto_perfil_cliente: "Histórico de atraso em pagamentos. Acompanhar de perto o financeiro.",
-    produtoNome: "HOLDING",
+    produtoNome: "CONSULTORIA GREEN+",
+  },
+  {
+    id: "contrato-4",
+    cliente_id: "cliente-4",
+    status: "ativo",
+    contexto_perfil_cliente: null,
+    produtoNome: "CONSULTORIA FINANCEIRA",
+  },
+  {
+    id: "contrato-5",
+    cliente_id: "cliente-5",
+    status: "ativo",
+    contexto_perfil_cliente: null,
+    produtoNome: "CONSULTORIA GREEN+",
   },
 ];
 
