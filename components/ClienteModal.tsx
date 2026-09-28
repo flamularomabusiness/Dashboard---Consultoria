@@ -11,13 +11,15 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusClienteBadge } from "@/components/StatusClienteBadge";
-import type { ClienteCRM, Consultora, Reuniao } from "@/lib/types";
+import type { ClienteCRM, Consultora, Contrato, Reuniao } from "@/lib/types";
 import { formatarData, formatarMoedaBR } from "@/lib/utils";
 import { calcularProximoMarco } from "@/lib/calcular-marcos";
 
 interface ClienteModalProps {
   cliente: ClienteCRM | null;
   consultora: Consultora | null;
+  /** Contrato ativo do cliente — é dele que vem o "Perfil / Contexto". */
+  contrato: Contrato | null;
   /** Já filtradas pelo cliente e ordenadas da mais recente para a mais antiga. */
   ultimasReunioes: Reuniao[];
   open: boolean;
@@ -27,6 +29,7 @@ interface ClienteModalProps {
 export function ClienteModal({
   cliente,
   consultora,
+  contrato,
   ultimasReunioes,
   open,
   onOpenChange,
@@ -75,8 +78,13 @@ export function ClienteModal({
             <CardTitle>Perfil / Contexto</CardTitle>
           </CardHeader>
           <CardContent>
+            {contrato?.produtoNome && (
+              <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                {contrato.produtoNome}
+              </p>
+            )}
             <p className="text-sm whitespace-pre-wrap text-foreground">
-              {cliente.perfil_contexto || (
+              {contrato?.contexto_perfil_cliente?.trim() || (
                 <span className="text-muted-foreground italic">Perfil não informado</span>
               )}
             </p>

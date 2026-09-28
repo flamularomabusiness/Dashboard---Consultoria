@@ -73,8 +73,21 @@ export interface ClienteCRM {
   data_criacao: string; // timestamp ISO
   data_inicio_contrato: string | null; // data ISO (yyyy-MM-dd)
   consultora_id: string | null;
-  /** Texto livre com contexto/perfil do cliente, preenchido manualmente pela consultora. */
-  perfil_contexto: string | null;
+}
+
+/**
+ * Contrato do cliente (tabela Supabase "contratos", da plataforma de mensalidades
+ * GRUPO ROMABC — não é uma tabela deste app). É aqui, não em `clientes`, que fica
+ * `contexto_perfil_cliente`: o texto livre que a plataforma exibe em "Contexto e
+ * Perfil do Cliente", editado por lá. `produtoNome` vem de um join com "produtos"
+ * (ex.: "CONSULTORIA FINANCEIRA").
+ */
+export interface Contrato {
+  id: string;
+  cliente_id: string;
+  status: string;
+  contexto_perfil_cliente: string | null;
+  produtoNome: string | null;
 }
 
 /**

@@ -68,10 +68,28 @@ create table if not exists clientes (
   -- Podem ficar vazios até o onboarding do cliente ser concluído.
   data_inicio_contrato date,
   consultora_id text references consultoras (id) on delete set null,
-  -- Texto livre com contexto/perfil do cliente, preenchido manualmente pela
-  -- consultora (exibido em destaque no modal de detalhes de /clientes).
+  -- NÃO USADA pelo app (deixada aqui só porque já existe na tabela real) — o
+  -- texto de "Perfil / Contexto" exibido em /clientes vem, na verdade, de
+  -- contratos.contexto_perfil_cliente (ver comentário abaixo). Descoberto em
+  -- 2026-09-28: essa coluna foi criada por engano, achando que era aqui que a
+  -- plataforma de mensalidades salvava o campo "Contexto e Perfil do Cliente".
   perfil_contexto text
 );
+
+-- As duas tabelas abaixo (contratos, produtos) pertencem à plataforma de
+-- mensalidades GRUPO ROMABC, não a este app — só documentando aqui as colunas
+-- que /clientes lê de lá (mesmo projeto Supabase, tabelas já existentes,
+-- conferido via REST API em 2026-09-28). Não rode "create table" para elas.
+--
+-- contratos (relevante pra este app):
+--   id uuid, cliente_id uuid references clientes(id), status text,
+--   contexto_perfil_cliente text  -- é AQUI que fica o texto de "Contexto e
+--     Perfil do Cliente" que a plataforma de mensalidades edita.
+--   produto_id uuid references produtos(id)
+--
+-- produtos (relevante pra este app):
+--   id uuid, nome text  -- ex.: "CONSULTORIA FINANCEIRA", exibido como rótulo
+--     acima do texto de contexto no modal de detalhes.
 
 -- Dados iniciais de exemplo (opcional) — ajuste os ids para bater com os
 -- valores de consultora_id usados na sua planilha de clientes.

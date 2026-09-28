@@ -8,6 +8,7 @@ import type {
   Cliente,
   ClienteCRM,
   Consultora,
+  Contrato,
   Reuniao,
 } from "@/lib/types";
 import { nomeDiaSemana } from "@/lib/utils";
@@ -48,8 +49,6 @@ export const mockClientesCRM: ClienteCRM[] = [
     data_criacao: iso(subDays(hoje, 95)),
     data_inicio_contrato: iso(subDays(hoje, 90)), // marco de 3 meses: HOJE
     consultora_id: "consultora-1",
-    perfil_contexto:
-      "Cliente exigente com prazos, prefere reuniões pela manhã. Sócio principal é o ponto de contato.",
   },
   {
     id: "cliente-2",
@@ -61,7 +60,6 @@ export const mockClientesCRM: ClienteCRM[] = [
     data_criacao: iso(subDays(hoje, 35)),
     data_inicio_contrato: iso(subDays(hoje, 30)), // marco de 30 dias: HOJE
     consultora_id: "consultora-1",
-    perfil_contexto: null, // ainda não preenchido, pra testar o placeholder
   },
   {
     id: "cliente-3",
@@ -73,7 +71,6 @@ export const mockClientesCRM: ClienteCRM[] = [
     data_criacao: iso(subDays(hoje, 150)),
     data_inicio_contrato: iso(subDays(hoje, 145)), // todos os marcos concluídos
     consultora_id: "consultora-2",
-    perfil_contexto: "Histórico de atraso em pagamentos. Acompanhar de perto o financeiro.",
   },
   {
     id: "cliente-4",
@@ -85,7 +82,6 @@ export const mockClientesCRM: ClienteCRM[] = [
     data_criacao: iso(subDays(hoje, 10)),
     data_inicio_contrato: iso(subDays(hoje, 8)), // marco de 30 dias: pendente
     consultora_id: "consultora-2",
-    perfil_contexto: null,
   },
   {
     id: "cliente-5",
@@ -97,7 +93,35 @@ export const mockClientesCRM: ClienteCRM[] = [
     data_criacao: iso(hoje),
     data_inicio_contrato: null, // ainda não iniciado
     consultora_id: null,
-    perfil_contexto: null,
+  },
+];
+
+// Contratos fictícios (tabela "contratos" da plataforma de mensalidades) — é daqui,
+// via `contexto_perfil_cliente`, que vem o texto exibido no card "Perfil / Contexto"
+// do modal de detalhes. Só o cliente-1 e o cliente-3 têm contexto preenchido, pra
+// exercitar tanto o texto quanto o placeholder "Perfil não informado".
+export const mockContratos: Contrato[] = [
+  {
+    id: "contrato-1",
+    cliente_id: "cliente-1",
+    status: "ativo",
+    contexto_perfil_cliente:
+      "Cliente exigente com prazos, prefere reuniões pela manhã. Sócio principal é o ponto de contato.",
+    produtoNome: "CONSULTORIA FINANCEIRA",
+  },
+  {
+    id: "contrato-2",
+    cliente_id: "cliente-2",
+    status: "ativo",
+    contexto_perfil_cliente: null,
+    produtoNome: "CONSULTORIA FINANCEIRA",
+  },
+  {
+    id: "contrato-3",
+    cliente_id: "cliente-3",
+    status: "ativo",
+    contexto_perfil_cliente: "Histórico de atraso em pagamentos. Acompanhar de perto o financeiro.",
+    produtoNome: "HOLDING",
   },
 ];
 

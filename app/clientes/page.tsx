@@ -29,8 +29,8 @@ import { ClienteHoverCard } from "@/components/ClienteHoverCard";
 import { ClienteModal } from "@/components/ClienteModal";
 import { StatusClienteBadge } from "@/components/StatusClienteBadge";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
-import { mockClientesCRM, mockConsultoras, mockReunioes } from "@/lib/mock-data";
-import type { ClienteCRM, Consultora, Reuniao, StatusCliente } from "@/lib/types";
+import { mockClientesCRM, mockConsultoras, mockContratos, mockReunioes } from "@/lib/mock-data";
+import type { ClienteCRM, Consultora, Contrato, Reuniao, StatusCliente } from "@/lib/types";
 import { formatarData } from "@/lib/utils";
 import { calcularProximoMarco, type CorMarco } from "@/lib/calcular-marcos";
 
@@ -47,6 +47,7 @@ export default function ClientesPage() {
   const [clientes, setClientes] = React.useState<ClienteCRM[]>([]);
   const [consultoras, setConsultoras] = React.useState<Consultora[]>([]);
   const [reunioes, setReunioes] = React.useState<Reuniao[]>([]);
+  const [contratos, setContratos] = React.useState<Contrato[]>([]);
   const [carregando, setCarregando] = React.useState(true);
 
   const [filtroStatus, setFiltroStatus] = React.useState<StatusCliente | "todos">("todos");
@@ -65,21 +66,37 @@ export default function ClientesPage() {
             { data: clientesData, error: erroClientes },
             { data: consultorasData, error: erroConsultoras },
             { data: reunioesData, error: erroReunioes },
+            { data: contratosData, error: erroContratos },
           ] = await Promise.all([
             supabase.from("clientes").select("*").order("data_criacao", { ascending: false }),
             supabase.from("consultoras").select("*"),
             supabase.from("reunioes").select("*"),
+            // "contratos"/"produtos" são da plataforma de mensalidades (mesmo Supabase),
+            // não deste app — é lá que mora `contexto_perfil_cliente`, não em "clientes".
+            supabase
+              .from("contratos")
+              .select("id,cliente_id,status,contexto_perfil_cliente,produtos(nome)"),
           ]);
-          if (erroClientes || erroConsultoras || erroReunioes) {
-            throw erroClientes ?? erroConsultoras ?? erroReunioes;
+          if (erroClientes || erroConsultoras || erroReunioes || erroContratos) {
+            throw erroClientes ?? erroConsultoras ?? erroReunioes ?? erroContratos;
           }
           setClientes(clientesData ?? []);
           setConsultoras(consultorasData ?? []);
           setReunioes(reunioesData ?? []);
+          setContratos(
+            (contratosData ?? []).map((c) => ({
+              id: c.id,
+              cliente_id: c.cliente_id,
+              status: c.status,
+              contexto_perfil_cliente: c.contexto_perfil_cliente,
+              produtoNome: (c.produtos as unknown as { nome: string } | null)?.nome ?? null,
+            })),
+          );
         } else {
           setClientes(mockClientesCRM);
           setConsultoras(mockConsultoras);
           setReunioes(mockReunioes);
+          setContratos(mockContratos);
         }
       } catch (erro) {
         console.error("Erro ao carregar clientes:", erro);
@@ -87,6 +104,7 @@ export default function ClientesPage() {
         setClientes(mockClientesCRM);
         setConsultoras(mockConsultoras);
         setReunioes(mockReunioes);
+        setContratos(mockContratos);
       } finally {
         setCarregando(false);
       }
@@ -106,6 +124,15 @@ export default function ClientesPage() {
       .filter((r) => r.cliente_nome === cliente.nome_razao_social)
       .sort((a, b) => b.data_reuniao.localeCompare(a.data_reuniao))
       .slice(0, 3);
+  }
+
+  /** Contrato ativo do cliente (hoje, um cliente tem no máximo um). */
+  function contratoDoCliente(cliente: ClienteCRM): Contrato | null {
+    return (
+      contratos.find((c) => c.cliente_id === cliente.id && c.status === "ativo") ??
+      contratos.find((c) => c.cliente_id === cliente.id) ??
+      null
+    );
   }
 
   const clientesFiltrados = React.useMemo(() => {
@@ -293,6 +320,7 @@ export default function ClientesPage() {
       <ClienteModal
         cliente={clienteDetalhes}
         consultora={consultoraDoCliente(clienteDetalhes?.consultora_id ?? null)}
+        contrato={clienteDetalhes ? contratoDoCliente(clienteDetalhes) : null}
         ultimasReunioes={clienteDetalhes ? ultimasReunioesDoCliente(clienteDetalhes) : []}
         open={modalAberto}
         onOpenChange={setModalAberto}
