@@ -47,6 +47,16 @@ export function ClienteModal({
         </DialogHeader>
 
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
+          <dt className="text-muted-foreground">Razão Social</dt>
+          <dd>{cliente.nome_razao_social}</dd>
+
+          <dt className="text-muted-foreground">Nome Fantasia</dt>
+          <dd>
+            {cliente.nome_fantasia || (
+              <span className="text-muted-foreground italic">Não informado</span>
+            )}
+          </dd>
+
           <dt className="text-muted-foreground">Email</dt>
           <dd>{cliente.email_responsavel}</dd>
 

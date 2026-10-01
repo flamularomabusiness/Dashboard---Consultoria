@@ -66,6 +66,7 @@ export type StatusCliente = "ATIVO" | "INATIVO" | "INADIMPLENTE";
 export interface ClienteCRM {
   id: string;
   nome_razao_social: string;
+  nome_fantasia: string | null;
   cpf_cnpj_responsavel: string;
   email_responsavel: string;
   status: StatusCliente;

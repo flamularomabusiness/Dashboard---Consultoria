@@ -59,6 +59,7 @@ create index if not exists agendamentos_fixos_cliente_nome_idx on agendamentos_f
 create table if not exists clientes (
   id uuid primary key default gen_random_uuid(),
   nome_razao_social text not null,
+  nome_fantasia text,
   cpf_cnpj_responsavel text,
   email_responsavel text,
   status text not null default 'ATIVO'

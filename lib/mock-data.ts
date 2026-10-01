@@ -42,6 +42,7 @@ export const mockClientesCRM: ClienteCRM[] = [
   {
     id: "cliente-1",
     nome_razao_social: "Ótica Visão Clara",
+    nome_fantasia: "Visão Clara Ótica e Lentes",
     cpf_cnpj_responsavel: "12.345.678/0001-90",
     email_responsavel: "contato@oticavisaoclara.com.br",
     status: "ATIVO",
@@ -53,6 +54,7 @@ export const mockClientesCRM: ClienteCRM[] = [
   {
     id: "cliente-2",
     nome_razao_social: "Padaria Pão Dourado",
+    nome_fantasia: null, // ainda não preenchido, pra testar o placeholder
     cpf_cnpj_responsavel: "23.456.789/0001-01",
     email_responsavel: "financeiro@paodourado.com.br",
     status: "ATIVO",
@@ -64,6 +66,7 @@ export const mockClientesCRM: ClienteCRM[] = [
   {
     id: "cliente-3",
     nome_razao_social: "Mercado Bom Preço",
+    nome_fantasia: "Bom Preço Supermercados",
     cpf_cnpj_responsavel: "34.567.890/0001-12",
     email_responsavel: "adm@mercadobompreco.com.br",
     status: "INADIMPLENTE",
@@ -75,6 +78,7 @@ export const mockClientesCRM: ClienteCRM[] = [
   {
     id: "cliente-4",
     nome_razao_social: "Clínica Vida Saudável",
+    nome_fantasia: null,
     cpf_cnpj_responsavel: "45.678.901/0001-23",
     email_responsavel: "recepcao@vidasaudavel.com.br",
     status: "ATIVO",
@@ -86,6 +90,7 @@ export const mockClientesCRM: ClienteCRM[] = [
   {
     id: "cliente-5",
     nome_razao_social: "Construtora Alicerce",
+    nome_fantasia: null,
     cpf_cnpj_responsavel: "56.789.012/0001-34",
     email_responsavel: "diretoria@alicerceconstrutora.com.br",
     status: "INATIVO",
