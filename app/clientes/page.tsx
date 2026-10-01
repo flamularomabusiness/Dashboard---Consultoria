@@ -4,9 +4,8 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { AlertCircle, Bell, CheckCircle2, Eye, Loader2, Pencil, Users, X } from "lucide-react";
+import { Bell, CalendarClock, CheckCircle2, Loader2, UserCog, Users, X } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -18,22 +17,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { ClienteHoverCard } from "@/components/ClienteHoverCard";
+import { ClienteCard } from "@/components/ClienteCard";
 import { ClienteModal } from "@/components/ClienteModal";
-import { StatusClienteBadge } from "@/components/StatusClienteBadge";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { mockClientesCRM, mockConsultoras, mockContratos, mockReunioes } from "@/lib/mock-data";
 import type { ClienteCRM, Consultora, Contrato, Reuniao, StatusCliente } from "@/lib/types";
-import { formatarData } from "@/lib/utils";
-import { calcularProximoMarco, type CorMarco } from "@/lib/calcular-marcos";
+import { estaNaSemanaAtual } from "@/lib/utils";
+import { calcularProximoMarco } from "@/lib/calcular-marcos";
 
 // Produtos (une ROMA 20 / YMPULS 46) cujos clientes aparecem em /clientes —
 // os demais produtos da plataforma de mensalidades (EXTRAS, HOLDING, cursos
@@ -53,15 +43,6 @@ function filtrarClientesPermitidos(clientesTodos: ClienteCRM[], contratosTodos: 
   );
   return clientesTodos.filter((c) => idsPermitidos.has(c.id) && c.status !== "INATIVO");
 }
-
-const CORES_MARCO: Record<CorMarco, string> = {
-  amarelo:
-    "bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-950 dark:text-yellow-300 dark:border-yellow-800",
-  verde:
-    "bg-green-100 text-green-800 border-green-300 dark:bg-green-950 dark:text-green-300 dark:border-green-800",
-  azul: "border-[#16A0D6]/30 bg-[#16A0D6]/10 text-[#0F3460] dark:text-[#40D9D9]",
-  neutro: "bg-muted text-muted-foreground border-border",
-};
 
 export default function ClientesPage() {
   const [clientes, setClientes] = React.useState<ClienteCRM[]>([]);
@@ -198,18 +179,28 @@ export default function ClientesPage() {
 
   // Sempre sobre o total de clientes (antes dos filtros), igual ao resumo da página "/".
   const resumo = React.useMemo(() => {
+    const nomesPermitidos = new Set(clientes.map((c) => c.nome_razao_social));
+    const consultorasAtribuidas = new Set(
+      contratos
+        .filter((c) => clientes.some((cliente) => cliente.id === c.cliente_id))
+        .map((c) => c.consultora_id)
+        .filter((id): id is string => Boolean(id)),
+    );
+    const reunioesSemana = reunioes.filter(
+      (r) => nomesPermitidos.has(r.cliente_nome) && estaNaSemanaAtual(r.data_reuniao),
+    ).length;
+
     return clientes.reduce(
       (acc, cliente) => {
         if (cliente.status === "ATIVO") acc.ativos += 1;
-        if (cliente.status === "INADIMPLENTE") acc.inadimplentes += 1;
         if (calcularProximoMarco(cliente.data_inicio_contrato).cor === "amarelo") {
           acc.marcosHoje += 1;
         }
         return acc;
       },
-      { ativos: 0, inadimplentes: 0, marcosHoje: 0 },
+      { ativos: 0, marcosHoje: 0, consultoras: consultorasAtribuidas.size, reunioesSemana },
     );
-  }, [clientes]);
+  }, [clientes, contratos, reunioes]);
 
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 p-4 sm:p-6 lg:p-8">
@@ -222,20 +213,10 @@ export default function ClientesPage() {
 
       {/* Stats cards */}
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total de Clientes
-            </CardTitle>
-            <Users className="size-5 text-heading" />
-          </CardHeader>
-          <CardContent className="text-3xl font-bold text-heading">{clientes.length}</CardContent>
-        </Card>
-
         <Card className="border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/40">
           <CardHeader className="flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-green-800 dark:text-green-300">
-              Ativos
+              Clientes Ativos
             </CardTitle>
             <CheckCircle2 className="size-5 text-green-600 dark:text-green-400" />
           </CardHeader>
@@ -244,15 +225,27 @@ export default function ClientesPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/40">
+        <Card>
           <CardHeader className="flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-red-800 dark:text-red-300">
-              Inadimplentes
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Consultoras
             </CardTitle>
-            <AlertCircle className="size-5 text-red-600 dark:text-red-400" />
+            <UserCog className="size-5 text-heading" />
           </CardHeader>
-          <CardContent className="text-3xl font-bold text-red-900 dark:text-red-200">
-            {resumo.inadimplentes}
+          <CardContent className="text-3xl font-bold text-heading">
+            {resumo.consultoras}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Reuniões Semana
+            </CardTitle>
+            <CalendarClock className="size-5 text-heading" />
+          </CardHeader>
+          <CardContent className="text-3xl font-bold text-heading">
+            {resumo.reunioesSemana}
           </CardContent>
         </Card>
 
@@ -318,100 +311,33 @@ export default function ClientesPage() {
         </Button>
       </section>
 
-      {/* Tabela principal */}
-      <section className="overflow-hidden rounded-lg border">
-        <div className="max-h-[600px] overflow-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>CNPJ</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Consultora</TableHead>
-                <TableHead>Últimas Reuniões</TableHead>
-                <TableHead>Próximo Marco</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {carregando && (
-                <TableRow>
-                  <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
-                    <Loader2 className="mr-2 inline size-4 animate-spin" />
-                    Carregando dados...
-                  </TableCell>
-                </TableRow>
-              )}
-
-              {!carregando && clientesFiltrados.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
-                    Nenhum cliente encontrado para os filtros selecionados.
-                  </TableCell>
-                </TableRow>
-              )}
-
-              {!carregando &&
-                clientesFiltrados.map((cliente) => {
-                  const consultora = consultoraDoContrato(contratoDoCliente(cliente));
-                  const ultimasReunioes = ultimasReunioesDoCliente(cliente);
-                  const marco = calcularProximoMarco(cliente.data_inicio_contrato);
-
-                  return (
-                    <TableRow key={cliente.id}>
-                      <TableCell className="whitespace-nowrap">
-                        <ClienteHoverCard
-                          cliente={cliente}
-                          consultora={consultora}
-                          ultimasReunioes={ultimasReunioes}
-                        >
-                          {cliente.nome_razao_social}
-                        </ClienteHoverCard>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {cliente.cpf_cnpj_responsavel}
-                      </TableCell>
-                      <TableCell>
-                        <StatusClienteBadge status={cliente.status} />
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {consultora?.nome ?? "-"}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {ultimasReunioes.length === 0
-                          ? "Nenhuma"
-                          : `${formatarData(ultimasReunioes[0].data_reuniao)} (${ultimasReunioes.length})`}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        <Badge variant="outline" className={CORES_MARCO[marco.cor]}>
-                          <span aria-hidden="true">{marco.emoji}</span>
-                          {marco.texto}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            title="Ver Detalhes"
-                            onClick={() => abrirDetalhes(cliente)}
-                          >
-                            <Eye className="size-4" />
-                            <span className="hidden lg:inline">Ver Detalhes</span>
-                          </Button>
-                          <Button size="sm" variant="outline" title="Editar (em breve)" disabled>
-                            <Pencil className="size-4" />
-                            <span className="hidden lg:inline">Editar</span>
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-            </TableBody>
-          </Table>
+      {/* Grid de clientes */}
+      {carregando && (
+        <div className="py-10 text-center text-muted-foreground">
+          <Loader2 className="mr-2 inline size-4 animate-spin" />
+          Carregando dados...
         </div>
-      </section>
+      )}
+
+      {!carregando && clientesFiltrados.length === 0 && (
+        <div className="py-10 text-center text-muted-foreground">
+          Nenhum cliente encontrado para os filtros selecionados.
+        </div>
+      )}
+
+      {!carregando && clientesFiltrados.length > 0 && (
+        <section className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4">
+          {clientesFiltrados.map((cliente) => (
+            <ClienteCard
+              key={cliente.id}
+              cliente={cliente}
+              consultora={consultoraDoContrato(contratoDoCliente(cliente))}
+              ultimasReunioes={ultimasReunioesDoCliente(cliente)}
+              onVerDetalhes={() => abrirDetalhes(cliente)}
+            />
+          ))}
+        </section>
+      )}
 
       <footer className="flex items-center gap-2 text-sm text-muted-foreground">
         <Users className="size-4" />
