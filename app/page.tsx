@@ -3,11 +3,17 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { AlertCircle, CalendarPlus, CheckCircle2, FolderOpen, Loader2 } from "lucide-react";
+import {
+  AlertCircle,
+  CalendarPlus,
+  CheckCircle2,
+  FolderOpen,
+  Loader2,
+  TrendingUp,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
@@ -25,8 +31,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { FilterPill } from "@/components/FilterPill";
+import { StatsCard } from "@/components/StatsCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ReuniaoModal, type ReuniaoModalMode } from "@/components/ReuniaoModal";
+import { useBusca } from "@/lib/search-context";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { syncAgendamentosFixosToReunioes } from "@/lib/sync-reunioes";
 import {
@@ -67,6 +76,7 @@ interface ModalState {
 }
 
 export default function DashboardPage() {
+  const { busca } = useBusca();
   const [clientes, setClientes] = React.useState<Cliente[]>([]);
   const [consultoras, setConsultoras] = React.useState<Consultora[]>([]);
   const [reunioes, setReunioes] = React.useState<Reuniao[]>([]);
@@ -268,7 +278,15 @@ export default function DashboardPage() {
   const linhasFiltradas = React.useMemo(() => {
     const hoje = new Date();
     const domingoQueVem = addDays(hoje, 7 - hoje.getDay());
+    const buscaNormalizada = busca.trim().toLowerCase();
     return linhas.filter((linha) => {
+      if (
+        buscaNormalizada &&
+        !linha.cliente.cliente_nome.toLowerCase().includes(buscaNormalizada) &&
+        !nomeConsultora(linha.cliente.consultora_id).toLowerCase().includes(buscaNormalizada)
+      ) {
+        return false;
+      }
       if (filtroConsultora !== "todas" && linha.cliente.consultora_id !== filtroConsultora) {
         return false;
       }
@@ -299,9 +317,12 @@ export default function DashboardPage() {
       }
       return true;
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     linhas,
     reunioes,
+    consultoras,
+    busca,
     filtroConsultora,
     filtroStatus,
     apenasSemReuniaoSemana,
@@ -318,7 +339,7 @@ export default function DashboardPage() {
    */
   const resumo = React.useMemo(() => {
     const hoje = startOfDay(new Date());
-    return reunioes.reduce(
+    const contagem = reunioes.reduce(
       (acc, r) => {
         if (r.status === "finalizada") acc.completa += 1;
         else if (r.status === "pendente_drive") acc.pendente_drive += 1;
@@ -329,6 +350,9 @@ export default function DashboardPage() {
       },
       { completa: 0, pendente_drive: 0, atrasado: 0 } as Record<StatusVisual, number>,
     );
+    const taxaSucesso =
+      reunioes.length === 0 ? 0 : Math.round((contagem.completa / reunioes.length) * 100);
+    return { ...contagem, taxaSucesso };
   }, [reunioes]);
 
   // Para cada agendamento fixo, calcula a próxima ocorrência do dia da semana
@@ -498,51 +522,18 @@ export default function DashboardPage() {
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 p-4 sm:p-6 lg:p-8">
       <header className="flex flex-col gap-1">
-        <h1 className="text-[28px] font-bold tracking-tight text-heading">
-          Otimização de ATAs de Reuniões
-        </h1>
+        <h1 className="text-[28px] font-bold tracking-tight text-heading">Dashboard INSIGHT</h1>
         <p className="text-sm text-muted-foreground">
           Acompanhe reuniões, ATAs pendentes e prazos por cliente e consultora.
         </p>
       </header>
 
-      {/* Cards de resumo com status visual (verde/amarelo/vermelho) */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card className="border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/40">
-          <CardHeader className="flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-green-800 dark:text-green-300">
-              Completas
-            </CardTitle>
-            <CheckCircle2 className="size-5 text-green-600 dark:text-green-400" />
-          </CardHeader>
-          <CardContent className="text-3xl font-bold text-green-900 dark:text-green-200">
-            {resumo.completa}
-          </CardContent>
-        </Card>
-
-        <Card className="border-orange-300 bg-orange-50 dark:border-orange-800 dark:bg-orange-950/40">
-          <CardHeader className="flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-orange-800 dark:text-orange-300">
-              Pendente Drive
-            </CardTitle>
-            <FolderOpen className="size-5 text-orange-600 dark:text-orange-400" />
-          </CardHeader>
-          <CardContent className="text-3xl font-bold text-orange-900 dark:text-orange-200">
-            {resumo.pendente_drive}
-          </CardContent>
-        </Card>
-
-        <Card className="border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/40">
-          <CardHeader className="flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-red-800 dark:text-red-300">
-              Atrasados
-            </CardTitle>
-            <AlertCircle className="size-5 text-red-600 dark:text-red-400" />
-          </CardHeader>
-          <CardContent className="text-3xl font-bold text-red-900 dark:text-red-200">
-            {resumo.atrasado}
-          </CardContent>
-        </Card>
+      {/* Stats row */}
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatsCard label="Completas" value={resumo.completa} icon={CheckCircle2} />
+        <StatsCard label="Pendente Drive" value={resumo.pendente_drive} icon={FolderOpen} />
+        <StatsCard label="Atrasadas" value={resumo.atrasado} icon={AlertCircle} />
+        <StatsCard label="Taxa de Sucesso" value={`${resumo.taxaSucesso}%`} icon={TrendingUp} />
       </section>
 
       {/* Filtros */}
@@ -577,29 +568,20 @@ export default function DashboardPage() {
             </SelectContent>
           </Select>
 
-          <Button
-            variant={apenasSemReuniaoSemana ? "default" : "outline"}
+          <FilterPill
+            ativo={apenasSemReuniaoSemana}
             onClick={() => setApenasSemReuniaoSemana((v) => !v)}
-            className="w-full sm:w-auto"
           >
             Clientes sem reunião esta semana
-          </Button>
+          </FilterPill>
 
-          <Button
-            variant={apenasFaltandoSemana ? "default" : "outline"}
-            onClick={() => setApenasFaltandoSemana((v) => !v)}
-            className="w-full sm:w-auto"
-          >
+          <FilterPill ativo={apenasFaltandoSemana} onClick={() => setApenasFaltandoSemana((v) => !v)}>
             Só faltando esta semana
-          </Button>
+          </FilterPill>
 
-          <Button
-            variant={apenasAtrasados ? "default" : "outline"}
-            onClick={() => setApenasAtrasados((v) => !v)}
-            className="w-full sm:w-auto"
-          >
+          <FilterPill ativo={apenasAtrasados} onClick={() => setApenasAtrasados((v) => !v)}>
             Só atrasados
-          </Button>
+          </FilterPill>
         </div>
 
         <Button onClick={() => abrirAgendar()} className="w-full sm:w-auto">
@@ -678,6 +660,7 @@ export default function DashboardPage() {
                             <Button
                               size="sm"
                               variant="outline"
+                              className="rounded-full hover:border-brand-green hover:text-brand-green"
                               title="Registrar ATA recebida"
                               onClick={() => abrirAta(linha)}
                             >
@@ -689,6 +672,7 @@ export default function DashboardPage() {
                             <Button
                               size="sm"
                               variant="outline"
+                              className="rounded-full hover:border-brand-green hover:text-brand-green"
                               title="Agendar reunião"
                               onClick={() => abrirAgendar(linha.cliente.cliente_nome)}
                             >
@@ -699,6 +683,7 @@ export default function DashboardPage() {
                           {acoes.includes("finalizar") && (
                             <Button
                               size="sm"
+                              className="rounded-full"
                               title="Finalizar reunião"
                               onClick={() => abrirFinalizar(linha)}
                             >
@@ -710,6 +695,7 @@ export default function DashboardPage() {
                             <Button
                               size="sm"
                               variant="outline"
+                              className="rounded-full hover:border-brand-green hover:text-brand-green"
                               title="Ver resumo, arquivo e data"
                               onClick={() => abrirVer(linha)}
                             >

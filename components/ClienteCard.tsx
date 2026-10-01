@@ -20,7 +20,7 @@ const CORES_MARCO: Record<CorMarco, string> = {
     "bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-950 dark:text-yellow-300 dark:border-yellow-800",
   verde:
     "bg-green-100 text-green-800 border-green-300 dark:bg-green-950 dark:text-green-300 dark:border-green-800",
-  azul: "border-[#16A0D6]/30 bg-[#16A0D6]/10 text-[#0F3460] dark:text-[#40D9D9]",
+  azul: "border-brand-blue/30 bg-brand-blue/10 text-brand-navy dark:text-brand-green",
   neutro: "bg-muted text-muted-foreground border-border",
 };
 
@@ -51,7 +51,7 @@ export function ClienteCard({
           onVerDetalhes();
         }
       }}
-      className="cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+      className="cursor-pointer border border-brand-blue/30 transition-all duration-200 hover:-translate-y-1 hover:border-brand-green hover:shadow-lg"
     >
       <CardHeader>
         <div className="min-w-0">
@@ -90,8 +90,7 @@ export function ClienteCard({
         <div className="flex gap-2 pt-3">
           <Button
             size="sm"
-            variant="outline"
-            className="flex-1"
+            className="flex-1 rounded-full border-none bg-gradient-to-r from-brand-blue to-brand-green text-white hover:brightness-110"
             onClick={(e) => {
               e.stopPropagation();
               onVerDetalhes();
@@ -103,6 +102,7 @@ export function ClienteCard({
           <Button
             size="sm"
             variant="outline"
+            className="rounded-full"
             title="Editar (em breve)"
             disabled
             onClick={(e) => e.stopPropagation()}

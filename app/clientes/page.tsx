@@ -7,9 +7,7 @@ import { toast } from "sonner";
 import { Bell, CalendarClock, CheckCircle2, Loader2, UserCog, Users, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
+import { FilterPill } from "@/components/FilterPill";
 import {
   Select,
   SelectContent,
@@ -19,6 +17,8 @@ import {
 } from "@/components/ui/select";
 import { ClienteCard } from "@/components/ClienteCard";
 import { ClienteModal } from "@/components/ClienteModal";
+import { StatsCard } from "@/components/StatsCard";
+import { useBusca } from "@/lib/search-context";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { mockClientesCRM, mockConsultoras, mockContratos, mockReunioes } from "@/lib/mock-data";
 import type { ClienteCRM, Consultora, Contrato, Reuniao, StatusCliente } from "@/lib/types";
@@ -45,6 +45,7 @@ function filtrarClientesPermitidos(clientesTodos: ClienteCRM[], contratosTodos: 
 }
 
 export default function ClientesPage() {
+  const { busca } = useBusca();
   const [clientes, setClientes] = React.useState<ClienteCRM[]>([]);
   const [consultoras, setConsultoras] = React.useState<Consultora[]>([]);
   const [reunioes, setReunioes] = React.useState<Reuniao[]>([]);
@@ -151,7 +152,16 @@ export default function ClientesPage() {
   }
 
   const clientesFiltrados = React.useMemo(() => {
+    const buscaNormalizada = busca.trim().toLowerCase();
     return clientes.filter((cliente) => {
+      if (
+        buscaNormalizada &&
+        !cliente.nome_razao_social.toLowerCase().includes(buscaNormalizada) &&
+        !(cliente.nome_fantasia ?? "").toLowerCase().includes(buscaNormalizada) &&
+        !cliente.cpf_cnpj_responsavel.toLowerCase().includes(buscaNormalizada)
+      ) {
+        return false;
+      }
       if (filtroStatus !== "todos" && cliente.status !== filtroStatus) return false;
       if (filtroConsultora !== "todas") {
         const contrato = contratoDoCliente(cliente);
@@ -164,7 +174,7 @@ export default function ClientesPage() {
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientes, contratos, filtroStatus, filtroConsultora, apenasMarcoHoje]);
+  }, [clientes, contratos, busca, filtroStatus, filtroConsultora, apenasMarcoHoje]);
 
   function limparFiltros() {
     setFiltroStatus("todos");
@@ -213,53 +223,10 @@ export default function ClientesPage() {
 
       {/* Stats cards */}
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/40">
-          <CardHeader className="flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-green-800 dark:text-green-300">
-              Clientes Ativos
-            </CardTitle>
-            <CheckCircle2 className="size-5 text-green-600 dark:text-green-400" />
-          </CardHeader>
-          <CardContent className="text-3xl font-bold text-green-900 dark:text-green-200">
-            {resumo.ativos}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Consultoras
-            </CardTitle>
-            <UserCog className="size-5 text-heading" />
-          </CardHeader>
-          <CardContent className="text-3xl font-bold text-heading">
-            {resumo.consultoras}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Reuniões Semana
-            </CardTitle>
-            <CalendarClock className="size-5 text-heading" />
-          </CardHeader>
-          <CardContent className="text-3xl font-bold text-heading">
-            {resumo.reunioesSemana}
-          </CardContent>
-        </Card>
-
-        <Card className="border-yellow-300 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950/40">
-          <CardHeader className="flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-yellow-800 dark:text-yellow-300">
-              Marcos Hoje
-            </CardTitle>
-            <Bell className="size-5 text-yellow-600 dark:text-yellow-400" />
-          </CardHeader>
-          <CardContent className="text-3xl font-bold text-yellow-900 dark:text-yellow-200">
-            {resumo.marcosHoje}
-          </CardContent>
-        </Card>
+        <StatsCard label="Clientes Ativos" value={resumo.ativos} icon={CheckCircle2} />
+        <StatsCard label="Consultoras" value={resumo.consultoras} icon={UserCog} />
+        <StatsCard label="Reuniões Semana" value={resumo.reunioesSemana} icon={CalendarClock} />
+        <StatsCard label="Marcos Hoje" value={resumo.marcosHoje} icon={Bell} />
       </section>
 
       {/* Filtros */}
@@ -293,16 +260,9 @@ export default function ClientesPage() {
             </SelectContent>
           </Select>
 
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="apenas-marco-hoje"
-              checked={apenasMarcoHoje}
-              onCheckedChange={(valor) => setApenasMarcoHoje(valor === true)}
-            />
-            <Label htmlFor="apenas-marco-hoje" className="cursor-pointer font-normal">
-              Mostrar apenas com marcos hoje
-            </Label>
-          </div>
+          <FilterPill ativo={apenasMarcoHoje} onClick={() => setApenasMarcoHoje((v) => !v)}>
+            Marcos hoje
+          </FilterPill>
         </div>
 
         <Button variant="outline" onClick={limparFiltros} className="w-full sm:w-auto">
