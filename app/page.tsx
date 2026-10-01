@@ -28,6 +28,7 @@ import {
 import { StatusBadge } from "@/components/StatusBadge";
 import { ReuniaoModal, type ReuniaoModalMode } from "@/components/ReuniaoModal";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { syncAgendamentosFixosToReunioes } from "@/lib/sync-reunioes";
 import {
   mockAgendamentosFixos,
   mockAgendamentosFixosSheet,
@@ -53,9 +54,10 @@ import {
   formatarData,
   planejarSincronizacaoAgendamentos,
   proximaOcorrenciaDiaSemana,
+  resolverConsultoraId,
   separarUltimaEProximaReuniao,
 } from "@/lib/utils";
-import { format } from "date-fns";
+import { addDays, format, isBefore, parseISO, startOfDay } from "date-fns";
 
 interface ModalState {
   open: boolean;
@@ -74,6 +76,8 @@ export default function DashboardPage() {
   const [filtroConsultora, setFiltroConsultora] = React.useState("todas");
   const [filtroStatus, setFiltroStatus] = React.useState<StatusVisual | "todos">("todos");
   const [apenasSemReuniaoSemana, setApenasSemReuniaoSemana] = React.useState(false);
+  const [apenasFaltandoSemana, setApenasFaltandoSemana] = React.useState(false);
+  const [apenasAtrasados, setApenasAtrasados] = React.useState(false);
   const [apenasFaltando, setApenasFaltando] = React.useState(false);
 
   const [modal, setModal] = React.useState<ModalState>({
@@ -95,6 +99,7 @@ export default function DashboardPage() {
   async function sincronizarAgendamentosComSheets(
     daSheet: AgendamentoFixoSheet[],
     doSupabase: AgendamentoFixo[],
+    consultorasCarregadas: Consultora[],
   ): Promise<AgendamentoFixo[]> {
     if (!isSupabaseConfigured || !supabase) return doSupabase;
 
@@ -103,7 +108,9 @@ export default function DashboardPage() {
     for (const item of plano.paraInserir) {
       const { error } = await supabase.from("agendamentos_fixos").insert({
         cliente_nome: item.cliente_nome,
-        consultora_id: item.consultora_id || null,
+        // A planilha traz o nome da consultora (ex. "Tainara Muller"), não o
+        // id — a coluna é uuid no Supabase, então precisa resolver antes.
+        consultora_id: resolverConsultoraId(item.consultora_id, consultorasCarregadas),
         dia_semana: item.dia_semana,
         horario: item.horario,
       });
@@ -122,7 +129,7 @@ export default function DashboardPage() {
         .update({
           dia_semana: novo.dia_semana,
           horario: novo.horario,
-          consultora_id: novo.consultora_id || null,
+          consultora_id: resolverConsultoraId(novo.consultora_id, consultorasCarregadas),
         })
         .eq("id", atual.id);
       if (error) {
@@ -149,8 +156,9 @@ export default function DashboardPage() {
   }
 
   // Carrega clientes e agendamentos fixos (Google Sheets, com fallback fictício),
-  // consultoras/reuniões (Supabase quando configurado, senão dados fictícios) e
-  // sincroniza os agendamentos fixos da planilha para dentro do Supabase.
+  // consultoras/reuniões (Supabase quando configurado, senão dados fictícios),
+  // sincroniza os agendamentos fixos da planilha para dentro do Supabase e, a
+  // partir deles, gera as reuniões da semana que ainda não existem.
   React.useEffect(() => {
     async function carregarDados() {
       setCarregando(true);
@@ -160,10 +168,9 @@ export default function DashboardPage() {
           fetch("/api/agendamentos-fixos"),
         ]);
 
-        const clientesCarregados: Cliente[] = respostaClientes.ok
+        const clientesDaSheet: Cliente[] = respostaClientes.ok
           ? await respostaClientes.json()
           : mockClientes;
-        setClientes(clientesCarregados);
 
         const agendamentosSheetPayload: { configurado: boolean; agendamentos: AgendamentoFixoSheet[] } =
           respostaAgendamentosSheet.ok
@@ -183,8 +190,18 @@ export default function DashboardPage() {
           if (erroConsultoras || erroReunioes || erroAgendamentos) {
             throw erroConsultoras ?? erroReunioes ?? erroAgendamentos;
           }
-          setConsultoras(consultorasData ?? []);
-          setReunioes(reunioesData ?? []);
+          const consultorasCarregadas = consultorasData ?? [];
+          setConsultoras(consultorasCarregadas);
+          // A planilha traz o nome da consultora, não o id (ver comentário em
+          // sincronizarAgendamentosComSheets) — resolve aqui também pra
+          // filtro/exibição por consultora funcionarem para esses clientes.
+          setClientes(
+            clientesDaSheet.map((c) => ({
+              ...c,
+              consultora_id:
+                resolverConsultoraId(c.consultora_id, consultorasCarregadas) ?? c.consultora_id,
+            })),
+          );
 
           // Só sincroniza (grava no Supabase) quando a planilha real está
           // configurada — nunca com o fallback fictício de mock-data.ts.
@@ -192,10 +209,22 @@ export default function DashboardPage() {
             ? await sincronizarAgendamentosComSheets(
                 agendamentosSheetPayload.agendamentos,
                 agendamentosData ?? [],
+                consultorasCarregadas,
               )
             : (agendamentosData ?? []);
           setAgendamentosFixos(agendamentosSincronizados);
+
+          setReunioes(reunioesData ?? []);
+          const resultadoSync = await syncAgendamentosFixosToReunioes(
+            agendamentosSincronizados,
+            reunioesData ?? [],
+          );
+          if (resultadoSync.inseridas > 0) {
+            const { data: reunioesAtualizadas } = await supabase.from("reunioes").select("*");
+            setReunioes(reunioesAtualizadas ?? reunioesData ?? []);
+          }
         } else {
+          setClientes(clientesDaSheet);
           setConsultoras(mockConsultoras);
           setReunioes(mockReunioes);
           setAgendamentosFixos(mockAgendamentosFixos);
@@ -238,6 +267,7 @@ export default function DashboardPage() {
 
   const linhasFiltradas = React.useMemo(() => {
     const hoje = new Date();
+    const domingoQueVem = addDays(hoje, 7 - hoje.getDay());
     return linhas.filter((linha) => {
       if (filtroConsultora !== "todas" && linha.cliente.consultora_id !== filtroConsultora) {
         return false;
@@ -251,19 +281,55 @@ export default function DashboardPage() {
           estaNaSemanaAtual(linha.proximaReuniao?.data_reuniao, hoje);
         if (temReuniaoEstaSemana) return false;
       }
+      const reunioesDoCliente = reunioes.filter(
+        (r) => r.cliente_nome === linha.cliente.cliente_nome,
+      );
+      if (apenasFaltandoSemana) {
+        const temFaltandoEstaSemana = reunioesDoCliente.some((r) => {
+          const data = parseISO(r.data_reuniao);
+          return !isBefore(data, startOfDay(hoje)) && !isBefore(domingoQueVem, data);
+        });
+        if (!temFaltandoEstaSemana) return false;
+      }
+      if (apenasAtrasados) {
+        const temAtrasada = reunioesDoCliente.some(
+          (r) => r.status === "agendada" && isBefore(parseISO(r.data_reuniao), startOfDay(hoje)),
+        );
+        if (!temAtrasada) return false;
+      }
       return true;
     });
-  }, [linhas, filtroConsultora, filtroStatus, apenasSemReuniaoSemana]);
+  }, [
+    linhas,
+    reunioes,
+    filtroConsultora,
+    filtroStatus,
+    apenasSemReuniaoSemana,
+    apenasFaltandoSemana,
+    apenasAtrasados,
+  ]);
 
+  /**
+   * Stats do topo (Completas/Pendente Drive/Atrasadas): contagem direta sobre
+   * as reuniões em si, não o resumo por cliente usado nas linhas da tabela
+   * (`linha.statusVisual`, que olha só a última reunião de cada cliente e
+   * perdoa alguns dias antes de marcar como atrasado). Aqui "atrasada" é
+   * literal: reunião agendada cuja data já passou.
+   */
   const resumo = React.useMemo(() => {
-    return linhas.reduce(
-      (acc, linha) => {
-        acc[linha.statusVisual] += 1;
+    const hoje = startOfDay(new Date());
+    return reunioes.reduce(
+      (acc, r) => {
+        if (r.status === "finalizada") acc.completa += 1;
+        else if (r.status === "pendente_drive") acc.pendente_drive += 1;
+        if (r.status === "agendada" && isBefore(parseISO(r.data_reuniao), hoje)) {
+          acc.atrasado += 1;
+        }
         return acc;
       },
       { completa: 0, pendente_drive: 0, atrasado: 0 } as Record<StatusVisual, number>,
     );
-  }, [linhas]);
+  }, [reunioes]);
 
   // Para cada agendamento fixo, calcula a próxima ocorrência do dia da semana
   // e verifica se já existe uma reunião registrada para essa data -> "Marcada".
@@ -391,6 +457,17 @@ export default function DashboardPage() {
     });
   }
 
+  function abrirVer(linha: LinhaCliente) {
+    const reuniao = reuniaoParaAcao(linha);
+    if (!reuniao) return;
+    setModal({
+      open: true,
+      mode: "ver",
+      clienteNome: linha.cliente.cliente_nome,
+      reuniaoId: reuniao.id,
+    });
+  }
+
   /** Reunião usada para decidir as ações da linha: a última já realizada ou,
    * na falta dela, a próxima agendada (ainda sem nenhuma reunião concluída). */
   function reuniaoParaAcao(linha: LinhaCliente): Reuniao | null {
@@ -507,6 +584,22 @@ export default function DashboardPage() {
           >
             Clientes sem reunião esta semana
           </Button>
+
+          <Button
+            variant={apenasFaltandoSemana ? "default" : "outline"}
+            onClick={() => setApenasFaltandoSemana((v) => !v)}
+            className="w-full sm:w-auto"
+          >
+            Só faltando esta semana
+          </Button>
+
+          <Button
+            variant={apenasAtrasados ? "default" : "outline"}
+            onClick={() => setApenasAtrasados((v) => !v)}
+            className="w-full sm:w-auto"
+          >
+            Só atrasados
+          </Button>
         </div>
 
         <Button onClick={() => abrirAgendar()} className="w-full sm:w-auto">
@@ -551,6 +644,9 @@ export default function DashboardPage() {
               {!carregando &&
                 linhasFiltradas.map((linha) => {
                   const acoes = acoesDaLinha(linha);
+                  const totalReunioes = reunioes.filter(
+                    (r) => r.cliente_nome === linha.cliente.cliente_nome,
+                  ).length;
                   return (
                     <TableRow key={linha.cliente.cliente_nome}>
                       <TableCell className="font-medium whitespace-nowrap">
@@ -561,6 +657,9 @@ export default function DashboardPage() {
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         {formatarData(linha.ultimaReuniao?.data_reuniao)}
+                        {totalReunioes > 0 && (
+                          <span className="ml-1 text-muted-foreground">({totalReunioes})</span>
+                        )}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         {linha.diasDesdeUltimaReuniao === null
@@ -607,21 +706,17 @@ export default function DashboardPage() {
                               <span className="hidden lg:inline">Finalizar</span>
                             </Button>
                           )}
-                          {acoes.includes("ver") &&
-                            (linha.ultimaReuniao?.arquivo_drive_link ? (
-                              <Button size="sm" variant="outline" title="Ver arquivo final" asChild>
-                                <a
-                                  href={linha.ultimaReuniao.arquivo_drive_link}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
-                                  <span aria-hidden="true">📁</span>
-                                  <span className="hidden lg:inline">Ver</span>
-                                </a>
-                              </Button>
-                            ) : (
-                              <span className="self-center text-sm text-muted-foreground">-</span>
-                            ))}
+                          {acoes.includes("ver") && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              title="Ver resumo, arquivo e data"
+                              onClick={() => abrirVer(linha)}
+                            >
+                              <span aria-hidden="true">📁</span>
+                              <span className="hidden lg:inline">Ver</span>
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -732,6 +827,7 @@ export default function DashboardPage() {
         onOpenChange={(open) => setModal((m) => ({ ...m, open }))}
         clientes={clientes}
         clienteSelecionado={modal.clienteNome}
+        reuniaoVisualizada={reunioes.find((r) => r.id === modal.reuniaoId) ?? null}
         onAgendar={agendarReuniao}
         onAtaRecebida={(link) => registrarAtaRecebida(modal.reuniaoId!, link)}
         onFinalizar={(link) => finalizarReuniao(modal.reuniaoId!, link)}

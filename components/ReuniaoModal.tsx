@@ -27,10 +27,10 @@ import {
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { cn } from "@/lib/utils";
-import type { Cliente } from "@/lib/types";
+import { cn, formatarData } from "@/lib/utils";
+import type { Cliente, Reuniao } from "@/lib/types";
 
-export type ReuniaoModalMode = "agendar" | "ata" | "finalizar";
+export type ReuniaoModalMode = "agendar" | "ata" | "finalizar" | "ver";
 
 interface ReuniaoModalProps {
   open: boolean;
@@ -40,6 +40,8 @@ interface ReuniaoModalProps {
   clientes: Cliente[];
   /** Cliente pré-selecionado quando o modal é aberto a partir de uma linha da tabela. */
   clienteSelecionado: string;
+  /** Reunião finalizada sendo exibida — só usada no modo "ver". */
+  reuniaoVisualizada?: Reuniao | null;
   onAgendar: (clienteNome: string, data: Date) => Promise<void>;
   onAtaRecebida: (resumoZoom: string) => Promise<void>;
   onFinalizar: (linkDrive: string) => Promise<void>;
@@ -49,12 +51,21 @@ const TITULOS: Record<ReuniaoModalMode, string> = {
   agendar: "Agendar Reunião",
   ata: "ATA Recebida",
   finalizar: "Finalizar Reunião",
+  ver: "Reunião Finalizada",
 };
 
 const DESCRICOES: Record<ReuniaoModalMode, string> = {
   agendar: "Escolha o cliente e a data da próxima reunião.",
   ata: "Registre que o e-mail com a ATA/resumo do Zoom foi recebido.",
   finalizar: "Registre o arquivo final (Word + PDF) já editado no Drive.",
+  ver: "Resumo, arquivo final e data de conclusão.",
+};
+
+/** Texto do botão de confirmação, por modo — "ver" não tem (só "Fechar"). */
+const BOTAO_CONFIRMAR: Partial<Record<ReuniaoModalMode, string>> = {
+  agendar: "Agendar",
+  ata: "Marcar como Pendente",
+  finalizar: "Finalizar",
 };
 
 export function ReuniaoModal({
@@ -63,10 +74,56 @@ export function ReuniaoModal({
   onOpenChange,
   clientes,
   clienteSelecionado,
+  reuniaoVisualizada,
   onAgendar,
   onAtaRecebida,
   onFinalizar,
 }: ReuniaoModalProps) {
+  if (mode === "ver") {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{TITULOS.ver}</DialogTitle>
+            <DialogDescription>{DESCRICOES.ver}</DialogDescription>
+          </DialogHeader>
+
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 text-sm">
+            <dt className="text-muted-foreground">Resumo do Zoom</dt>
+            <dd className="whitespace-pre-wrap">
+              {reuniaoVisualizada?.resumo_zoom || "-"}
+            </dd>
+
+            <dt className="text-muted-foreground">Arquivo Final</dt>
+            <dd>
+              {reuniaoVisualizada?.arquivo_drive_link ? (
+                <a
+                  href={reuniaoVisualizada.arquivo_drive_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline underline-offset-4"
+                >
+                  Abrir no Drive
+                </a>
+              ) : (
+                "-"
+              )}
+            </dd>
+
+            <dt className="text-muted-foreground">Finalizada em</dt>
+            <dd>{formatarData(reuniaoVisualizada?.finalizada_em)}</dd>
+          </dl>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -226,7 +283,7 @@ function ReuniaoModalForm({
           Cancelar
         </Button>
         <Button type="submit" disabled={!podeSalvar}>
-          {enviando ? "Salvando..." : "Salvar"}
+          {enviando ? "Salvando..." : (BOTAO_CONFIRMAR[mode] ?? "Salvar")}
         </Button>
       </DialogFooter>
     </form>

@@ -12,7 +12,13 @@ import {
   startOfWeek,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import type { AgendamentoFixo, AgendamentoFixoSheet, Reuniao, StatusVisual } from "@/lib/types";
+import type {
+  AgendamentoFixo,
+  AgendamentoFixoSheet,
+  Consultora,
+  Reuniao,
+  StatusVisual,
+} from "@/lib/types";
 
 /** Prazo (em dias) a partir do qual uma reunião sem ATA finalizada é considerada atrasada. */
 export const LIMITE_DIAS_ATRASO = 7;
@@ -114,13 +120,19 @@ export const DIAS_SEMANA = [
   "sábado",
 ] as const;
 
-/** Remove acentos e sufixo "-feira" para comparar nomes de dia de forma tolerante. */
+/**
+ * Remove acentos, espaços e sufixo "feira" para comparar nomes de dia de forma
+ * tolerante — a planilha já veio com variações como "quinta- feira" (espaço
+ * extra depois do hífen), então os espaços são removidos antes de tentar
+ * casar o sufixo.
+ */
 function normalizarDiaSemana(diaSemana: string): string {
   return diaSemana
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
-    .replace(/-feira$/, "")
+    .replace(/\s+/g, "")
+    .replace(/-?feira$/, "")
     .trim();
 }
 
@@ -154,6 +166,25 @@ export function proximaOcorrenciaDiaSemana(
 /** Normaliza um horário "HH:MM" para o formato "HH:MM:SS" usado pelo Supabase. */
 export function normalizarHorario(horario: string): string {
   return horario.length === 5 ? `${horario}:00` : horario;
+}
+
+/**
+ * Resolve o `consultora_id` que vem da planilha (que pode ser o nome da
+ * consultora, ex. "Tainara Muller", em vez do id real) para o id de verdade
+ * da tabela `consultoras` — essa coluna é `uuid` no Supabase, então gravar o
+ * nome direto falha com "invalid input syntax for type uuid". Casa primeiro
+ * por id exato (planilhas antigas que já usem o id certo) e, se não achar,
+ * por nome (sem diferenciar maiúsculas/espaços nas pontas).
+ */
+export function resolverConsultoraId(
+  valor: string | null | undefined,
+  consultoras: Consultora[],
+): string | null {
+  if (!valor) return null;
+  const porId = consultoras.find((c) => c.id === valor);
+  if (porId) return porId.id;
+  const alvo = valor.trim().toLowerCase();
+  return consultoras.find((c) => c.nome.trim().toLowerCase() === alvo)?.id ?? null;
 }
 
 export interface PlanoSincronizacaoAgendamentos {
