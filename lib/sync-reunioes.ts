@@ -32,17 +32,31 @@ export async function syncAgendamentosFixosToReunioes(
       reunioesExistentes.map((r) => `${r.cliente_nome}|${r.data_reuniao}`),
     );
 
-    const aInserir = agendamentosFixos
-      .map((agendamento) => ({
+    // Map (não array) pra também deduplicar entre si: se agendamentos_fixos
+    // tiver mais de uma linha pro mesmo cliente (duplicata), só uma reunião é
+    // criada por cliente+data — sem isso, cada linha duplicada geraria sua
+    // própria reunião repetida no mesmo insert.
+    const candidatas = new Map<string, Omit<Reuniao, "id" | "created_at">>();
+    for (const agendamento of agendamentosFixos) {
+      const dataReuniao = format(
+        proximaOcorrenciaDiaSemana(agendamento.dia_semana, hoje),
+        "yyyy-MM-dd",
+      );
+      const chave = `${agendamento.cliente_nome}|${dataReuniao}`;
+      if (existentes.has(chave) || candidatas.has(chave)) continue;
+      candidatas.set(chave, {
         cliente_nome: agendamento.cliente_nome,
         consultora_id: agendamento.consultora_id,
-        data_reuniao: format(
-          proximaOcorrenciaDiaSemana(agendamento.dia_semana, hoje),
-          "yyyy-MM-dd",
-        ),
-        status: "agendada" as const,
-      }))
-      .filter((r) => !existentes.has(`${r.cliente_nome}|${r.data_reuniao}`));
+        data_reuniao: dataReuniao,
+        status: "agendada",
+        zoom_email_recebido: false,
+        data_ata_recebida: null,
+        resumo_zoom: null,
+        arquivo_drive_link: null,
+        finalizada_em: null,
+      });
+    }
+    const aInserir = Array.from(candidatas.values());
 
     if (aInserir.length === 0) {
       return { success: true, inseridas: 0 };
