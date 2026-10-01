@@ -419,9 +419,9 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8">
+    <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 p-4 sm:p-6 lg:p-8">
       <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">
+        <h1 className="text-[28px] font-bold tracking-tight text-heading">
           Otimização de ATAs de Reuniões
         </h1>
         <p className="text-sm text-muted-foreground">
@@ -516,7 +516,7 @@ export default function DashboardPage() {
       </section>
 
       {/* Tabela principal */}
-      <section className="rounded-lg border">
+      <section className="overflow-hidden rounded-lg border">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
@@ -635,7 +635,7 @@ export default function DashboardPage() {
       {/* Agendamentos fixos: compromisso semanal recorrente por cliente */}
       <section className="flex flex-col gap-3">
         <div className="flex flex-col gap-1">
-          <h2 className="text-lg font-semibold tracking-tight">Agendamentos Fixos da Semana</h2>
+          <h2 className="text-lg font-bold text-heading">Agendamentos Fixos da Semana</h2>
           <p className="text-sm text-muted-foreground">
             Próxima ocorrência de cada horário fixo e se já existe reunião marcada para ela.
           </p>
@@ -652,7 +652,7 @@ export default function DashboardPage() {
           </Label>
         </div>
 
-        <div className="rounded-lg border">
+        <div className="overflow-hidden rounded-lg border">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>

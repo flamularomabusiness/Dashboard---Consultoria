@@ -4,10 +4,11 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { Eye, Loader2, Pencil, Users, X } from "lucide-react";
+import { AlertCircle, Bell, CheckCircle2, Eye, Loader2, Pencil, Users, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
@@ -58,7 +59,7 @@ const CORES_MARCO: Record<CorMarco, string> = {
     "bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-950 dark:text-yellow-300 dark:border-yellow-800",
   verde:
     "bg-green-100 text-green-800 border-green-300 dark:bg-green-950 dark:text-green-300 dark:border-green-800",
-  azul: "bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800",
+  azul: "border-[#16A0D6]/30 bg-[#16A0D6]/10 text-[#0F3460] dark:text-[#40D9D9]",
   neutro: "bg-muted text-muted-foreground border-border",
 };
 
@@ -195,14 +196,78 @@ export default function ClientesPage() {
     setModalAberto(true);
   }
 
+  // Sempre sobre o total de clientes (antes dos filtros), igual ao resumo da página "/".
+  const resumo = React.useMemo(() => {
+    return clientes.reduce(
+      (acc, cliente) => {
+        if (cliente.status === "ATIVO") acc.ativos += 1;
+        if (cliente.status === "INADIMPLENTE") acc.inadimplentes += 1;
+        if (calcularProximoMarco(cliente.data_inicio_contrato).cor === "amarelo") {
+          acc.marcosHoje += 1;
+        }
+        return acc;
+      },
+      { ativos: 0, inadimplentes: 0, marcosHoje: 0 },
+    );
+  }, [clientes]);
+
   return (
-    <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8">
+    <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 p-4 sm:p-6 lg:p-8">
       <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Gestão de Clientes</h1>
+        <h1 className="text-[28px] font-bold tracking-tight text-heading">Gestão de Clientes</h1>
         <p className="text-sm text-muted-foreground">
           Visão geral de clientes e marcos de relacionamento
         </p>
       </header>
+
+      {/* Stats cards */}
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total de Clientes
+            </CardTitle>
+            <Users className="size-5 text-heading" />
+          </CardHeader>
+          <CardContent className="text-3xl font-bold text-heading">{clientes.length}</CardContent>
+        </Card>
+
+        <Card className="border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/40">
+          <CardHeader className="flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-green-800 dark:text-green-300">
+              Ativos
+            </CardTitle>
+            <CheckCircle2 className="size-5 text-green-600 dark:text-green-400" />
+          </CardHeader>
+          <CardContent className="text-3xl font-bold text-green-900 dark:text-green-200">
+            {resumo.ativos}
+          </CardContent>
+        </Card>
+
+        <Card className="border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/40">
+          <CardHeader className="flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-red-800 dark:text-red-300">
+              Inadimplentes
+            </CardTitle>
+            <AlertCircle className="size-5 text-red-600 dark:text-red-400" />
+          </CardHeader>
+          <CardContent className="text-3xl font-bold text-red-900 dark:text-red-200">
+            {resumo.inadimplentes}
+          </CardContent>
+        </Card>
+
+        <Card className="border-yellow-300 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950/40">
+          <CardHeader className="flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-yellow-800 dark:text-yellow-300">
+              Marcos Hoje
+            </CardTitle>
+            <Bell className="size-5 text-yellow-600 dark:text-yellow-400" />
+          </CardHeader>
+          <CardContent className="text-3xl font-bold text-yellow-900 dark:text-yellow-200">
+            {resumo.marcosHoje}
+          </CardContent>
+        </Card>
+      </section>
 
       {/* Filtros */}
       <section className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
@@ -254,7 +319,7 @@ export default function ClientesPage() {
       </section>
 
       {/* Tabela principal */}
-      <section className="rounded-lg border">
+      <section className="overflow-hidden rounded-lg border">
         <div className="max-h-[600px] overflow-auto">
           <Table>
             <TableHeader>

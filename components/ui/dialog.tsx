@@ -71,7 +71,7 @@ function DialogContent({
           <DialogPrimitive.Close data-slot="dialog-close" asChild>
             <Button
               variant="ghost"
-              className="absolute top-2 right-2"
+              className="absolute top-2 right-2 text-primary-foreground/80 hover:bg-primary-foreground/10 hover:text-primary-foreground"
               size="icon-sm"
             >
               <XIcon
@@ -89,7 +89,10 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-2", className)}
+      className={cn(
+        "-mx-4 -mt-4 mb-0 flex flex-col gap-1 rounded-t-xl bg-[var(--heading)] px-4 py-3 text-primary-foreground",
+        className
+      )}
       {...props}
     />
   )
@@ -130,7 +133,7 @@ function DialogTitle({
     <DialogPrimitive.Title
       data-slot="dialog-title"
       className={cn(
-        "font-heading text-base leading-none font-medium",
+        "font-heading text-lg leading-tight font-bold text-primary-foreground",
         className
       )}
       {...props}
@@ -146,7 +149,7 @@ function DialogDescription({
     <DialogPrimitive.Description
       data-slot="dialog-description"
       className={cn(
-        "text-sm text-muted-foreground *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground",
+        "text-sm text-primary-foreground/70 *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-primary-foreground",
         className
       )}
       {...props}
