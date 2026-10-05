@@ -5,10 +5,13 @@ import * as React from "react";
 import { toast } from "sonner";
 import {
   AlertCircle,
+  CalendarClock,
   CalendarPlus,
   CheckCircle2,
   FolderOpen,
   Loader2,
+  Pencil,
+  Trash2,
   TrendingUp,
 } from "lucide-react";
 
@@ -35,6 +38,16 @@ import { FilterPill } from "@/components/FilterPill";
 import { StatsCard } from "@/components/StatsCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ReuniaoModal, type ReuniaoModalMode } from "@/components/ReuniaoModal";
+import { DeleteReuniaoDialog } from "@/components/DeleteReuniaoDialog";
+import { EditReuniaoModal } from "@/components/EditReuniaoModal";
+import { RemarcarReuniaoModal } from "@/components/RemarcarReuniaoModal";
+import { ReuniaoDetalhesModal } from "@/components/ReuniaoDetalhesModal";
+import {
+  atualizarReuniao,
+  deletarReuniao,
+  historicoDoCliente,
+  type CamposReuniao,
+} from "@/lib/reunioes";
 import { useBusca } from "@/lib/search-context";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { syncAgendamentosFixosToReunioes } from "@/lib/sync-reunioes";
@@ -96,6 +109,15 @@ export default function DashboardPage() {
     clienteNome: "",
     reuniaoId: null,
   });
+
+  // Modais de CRUD guardam só o id: a reunião é lida do estado `reunioes`, então
+  // edições aparecem na hora e uma reunião deletada fecha o modal sozinha.
+  const [detalhesId, setDetalhesId] = React.useState<string | null>(null);
+  const [edicaoId, setEdicaoId] = React.useState<string | null>(null);
+  const [remarcarId, setRemarcarId] = React.useState<string | null>(null);
+  const [exclusaoId, setExclusaoId] = React.useState<string | null>(null);
+  const reuniaoPorId = (id: string | null) => reunioes.find((r) => r.id === id) ?? null;
+  const reuniaoDetalhes = reuniaoPorId(detalhesId);
 
   /**
    * Compara os agendamentos fixos da planilha com os do Supabase e grava lá
@@ -422,19 +444,32 @@ export default function DashboardPage() {
     toast.success(`Reunião agendada para ${clienteNome}.`);
   }
 
-  async function atualizarReuniao(reuniaoId: string, campos: Partial<Reuniao>) {
-    if (isSupabaseConfigured && supabase) {
-      const { error } = await supabase.from("reunioes").update(campos).eq("id", reuniaoId);
-      if (error) throw error;
-    }
-    setReunioes((atual) =>
-      atual.map((r) => (r.id === reuniaoId ? { ...r, ...campos } : r)),
-    );
+  /** Grava no Supabase e troca a linha no estado pela versão devolvida pelo banco. */
+  async function aplicarAtualizacao(reuniaoId: string, campos: CamposReuniao) {
+    const atualizada = await atualizarReuniao(reuniaoId, campos);
+    setReunioes((atual) => atual.map((r) => (r.id === reuniaoId ? atualizada : r)));
+  }
+
+  async function salvarEdicao(reuniaoId: string, campos: CamposReuniao) {
+    await aplicarAtualizacao(reuniaoId, campos);
+    toast.success("Reunião atualizada com sucesso");
+  }
+
+  async function remarcarReuniao(reuniaoId: string, novaData: string) {
+    await aplicarAtualizacao(reuniaoId, { data_reuniao: novaData });
+    toast.success(`Reunião remarcada para ${formatarData(novaData)}`);
+  }
+
+  async function excluirReuniao(reuniao: Reuniao) {
+    await deletarReuniao(reuniao.id);
+    setReunioes((atual) => atual.filter((r) => r.id !== reuniao.id));
+    if (detalhesId === reuniao.id) setDetalhesId(null);
+    toast.success("Reunião deletada com sucesso");
   }
 
   async function registrarAtaRecebida(reuniaoId: string, resumo: string) {
     const status: StatusReuniao = "pendente_drive";
-    await atualizarReuniao(reuniaoId, {
+    await aplicarAtualizacao(reuniaoId, {
       status,
       zoom_email_recebido: true,
       resumo_zoom: resumo || null,
@@ -445,7 +480,7 @@ export default function DashboardPage() {
 
   async function finalizarReuniao(reuniaoId: string, linkDrive: string) {
     const status: StatusReuniao = "finalizada";
-    await atualizarReuniao(reuniaoId, {
+    await aplicarAtualizacao(reuniaoId, {
       status,
       arquivo_drive_link: linkDrive,
       finalizada_em: new Date().toISOString(),
@@ -476,17 +511,6 @@ export default function DashboardPage() {
     setModal({
       open: true,
       mode: "finalizar",
-      clienteNome: linha.cliente.cliente_nome,
-      reuniaoId: reuniao.id,
-    });
-  }
-
-  function abrirVer(linha: LinhaCliente) {
-    const reuniao = reuniaoParaAcao(linha);
-    if (!reuniao) return;
-    setModal({
-      open: true,
-      mode: "ver",
       clienteNome: linha.cliente.cliente_nome,
       reuniaoId: reuniao.id,
     });
@@ -626,6 +650,12 @@ export default function DashboardPage() {
               {!carregando &&
                 linhasFiltradas.map((linha) => {
                   const acoes = acoesDaLinha(linha);
+                  const alvo = reuniaoParaAcao(linha);
+                  // Só reunião ainda "agendada" pode ser remarcada; a próxima tem prioridade.
+                  const alvoRemarcar =
+                    [linha.proximaReuniao, linha.ultimaReuniao].find(
+                      (r) => r?.status === "agendada",
+                    ) ?? null;
                   const totalReunioes = reunioes.filter(
                     (r) => r.cliente_nome === linha.cliente.cliente_nome,
                   ).length;
@@ -638,7 +668,7 @@ export default function DashboardPage() {
                         {nomeConsultora(linha.cliente.consultora_id)}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
-                        {formatarData(linha.ultimaReuniao?.data_reuniao)}
+                        <DataClicavel reuniao={linha.ultimaReuniao} onClick={setDetalhesId} />
                         {totalReunioes > 0 && (
                           <span className="ml-1 text-muted-foreground">({totalReunioes})</span>
                         )}
@@ -652,7 +682,7 @@ export default function DashboardPage() {
                         <StatusBadge status={linha.statusVisual} />
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
-                        {formatarData(linha.proximaReuniao?.data_reuniao)}
+                        <DataClicavel reuniao={linha.proximaReuniao} onClick={setDetalhesId} />
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
@@ -665,7 +695,7 @@ export default function DashboardPage() {
                               onClick={() => abrirAta(linha)}
                             >
                               <span aria-hidden="true">📎</span>
-                              <span className="hidden lg:inline">ATA Recebida</span>
+                              <span className="hidden 2xl:inline">ATA Recebida</span>
                             </Button>
                           )}
                           {acoes.includes("agendar") && (
@@ -677,7 +707,7 @@ export default function DashboardPage() {
                               onClick={() => abrirAgendar(linha.cliente.cliente_nome)}
                             >
                               <CalendarPlus className="size-4" />
-                              <span className="hidden lg:inline">Agendar</span>
+                              <span className="hidden 2xl:inline">Agendar</span>
                             </Button>
                           )}
                           {acoes.includes("finalizar") && (
@@ -688,7 +718,7 @@ export default function DashboardPage() {
                               onClick={() => abrirFinalizar(linha)}
                             >
                               <span aria-hidden="true">✅</span>
-                              <span className="hidden lg:inline">Finalizar</span>
+                              <span className="hidden 2xl:inline">Finalizar</span>
                             </Button>
                           )}
                           {acoes.includes("ver") && (
@@ -697,11 +727,47 @@ export default function DashboardPage() {
                               variant="outline"
                               className="rounded-full hover:border-brand-green hover:text-brand-green"
                               title="Ver resumo, arquivo e data"
-                              onClick={() => abrirVer(linha)}
+                              onClick={() => setDetalhesId(reuniaoParaAcao(linha)?.id ?? null)}
                             >
                               <span aria-hidden="true">📁</span>
-                              <span className="hidden lg:inline">Ver</span>
+                              <span className="hidden 2xl:inline">Ver</span>
                             </Button>
+                          )}
+                          {alvo && (
+                            <>
+                              <Button
+                                size="icon-sm"
+                                variant="outline"
+                                className="rounded-full text-brand-blue dark:text-blue-400 transition-transform duration-200 hover:scale-105 hover:bg-brand-blue/10 hover:text-brand-blue"
+                                title="Editar reunião"
+                                aria-label={`Editar reunião de ${linha.cliente.cliente_nome}`}
+                                onClick={() => setEdicaoId(alvo.id)}
+                              >
+                                <Pencil className="size-4" />
+                              </Button>
+                              {alvoRemarcar && (
+                                <Button
+                                  size="icon-sm"
+                                  variant="outline"
+                                  className="rounded-full text-brand-green-alt transition-transform duration-200 hover:scale-105 hover:bg-brand-green/10 hover:text-brand-green-alt dark:text-brand-green"
+                                  title="Remarcar reunião"
+                                  aria-label={`Remarcar reunião de ${linha.cliente.cliente_nome}`}
+                                  onClick={() => setRemarcarId(alvoRemarcar.id)}
+                                >
+                                  <CalendarClock className="size-4" />
+                                </Button>
+                              )}
+                              <Button
+                                size="icon-sm"
+                                variant="outline"
+                                className="rounded-full text-destructive transition-transform duration-200 hover:scale-105 hover:bg-destructive/10 hover:text-destructive"
+                                title="Deletar reunião"
+                                aria-label={`Deletar reunião de ${linha.cliente.cliente_nome}`}
+                                onClick={() => setExclusaoId(alvo.id)}
+                              >
+                                <Trash2 className="size-4" />
+                              </Button>
+                            </>
                           )}
                         </div>
                       </TableCell>
@@ -813,11 +879,67 @@ export default function DashboardPage() {
         onOpenChange={(open) => setModal((m) => ({ ...m, open }))}
         clientes={clientes}
         clienteSelecionado={modal.clienteNome}
-        reuniaoVisualizada={reunioes.find((r) => r.id === modal.reuniaoId) ?? null}
         onAgendar={agendarReuniao}
         onAtaRecebida={(link) => registrarAtaRecebida(modal.reuniaoId!, link)}
         onFinalizar={(link) => finalizarReuniao(modal.reuniaoId!, link)}
       />
+
+      <ReuniaoDetalhesModal
+        reuniao={reuniaoDetalhes}
+        historico={
+          reuniaoDetalhes ? historicoDoCliente(reunioes, reuniaoDetalhes.cliente_nome) : []
+        }
+        consultoraNome={nomeConsultora(reuniaoDetalhes?.consultora_id ?? "")}
+        open={reuniaoDetalhes !== null}
+        onOpenChange={(open) => !open && setDetalhesId(null)}
+        onSelecionar={setDetalhesId}
+        onEditar={(r) => setEdicaoId(r.id)}
+        onRemarcar={(r) => setRemarcarId(r.id)}
+        onDeletar={(r) => setExclusaoId(r.id)}
+      />
+
+      <EditReuniaoModal
+        reuniao={reuniaoPorId(edicaoId)}
+        open={reuniaoPorId(edicaoId) !== null}
+        onOpenChange={(open) => !open && setEdicaoId(null)}
+        clientes={clientes}
+        onSalvar={salvarEdicao}
+      />
+
+      <RemarcarReuniaoModal
+        reuniao={reuniaoPorId(remarcarId)}
+        open={reuniaoPorId(remarcarId) !== null}
+        onOpenChange={(open) => !open && setRemarcarId(null)}
+        onRemarcar={remarcarReuniao}
+      />
+
+      <DeleteReuniaoDialog
+        reuniao={reuniaoPorId(exclusaoId)}
+        open={reuniaoPorId(exclusaoId) !== null}
+        onOpenChange={(open) => !open && setExclusaoId(null)}
+        onConfirmar={excluirReuniao}
+      />
     </main>
+  );
+}
+
+/** Data de uma reunião como botão: abre o modal de detalhes daquela reunião. */
+function DataClicavel({
+  reuniao,
+  onClick,
+}: {
+  reuniao: Reuniao | null;
+  onClick: (id: string) => void;
+}) {
+  if (!reuniao) return <>-</>;
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(reuniao.id)}
+      title="Ver detalhes da reunião"
+      className="cursor-pointer rounded-sm font-medium underline-offset-4 transition-colors hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+    >
+      {formatarData(reuniao.data_reuniao)}
+    </button>
   );
 }

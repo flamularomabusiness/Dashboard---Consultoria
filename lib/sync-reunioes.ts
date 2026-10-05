@@ -2,7 +2,7 @@
 // pra próxima ocorrência do dia/horário recorrente — assim o dashboard de
 // reuniões já nasce com a agenda da semana preenchida, sem precisar que
 // alguém agende manualmente cada compromisso fixo.
-import { format } from "date-fns";
+import { addDays, format } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import type { AgendamentoFixo, Reuniao } from "@/lib/types";
 import { proximaOcorrenciaDiaSemana } from "@/lib/utils";
@@ -37,13 +37,25 @@ export async function syncAgendamentosFixosToReunioes(
     // criada por cliente+data — sem isso, cada linha duplicada geraria sua
     // própria reunião repetida no mesmo insert.
     const candidatas = new Map<string, Omit<Reuniao, "id" | "created_at">>();
+    const hojeISO = format(hoje, "yyyy-MM-dd");
     for (const agendamento of agendamentosFixos) {
-      const dataReuniao = format(
-        proximaOcorrenciaDiaSemana(agendamento.dia_semana, hoje),
-        "yyyy-MM-dd",
-      );
+      const ocorrencia = proximaOcorrenciaDiaSemana(agendamento.dia_semana, hoje);
+      const dataReuniao = format(ocorrencia, "yyyy-MM-dd");
       const chave = `${agendamento.cliente_nome}|${dataReuniao}`;
       if (existentes.has(chave) || candidatas.has(chave)) continue;
+
+      // Reunião remarcada: se o cliente já tem uma "agendada" de hoje até 6 dias
+      // depois da ocorrência fixa, o ciclo está coberto — senão remarcar (ex.:
+      // segunda -> terça) faria o sync recriar a segunda e duplicar.
+      const limiteISO = format(addDays(ocorrencia, 6), "yyyy-MM-dd");
+      const cicloCoberto = reunioesExistentes.some(
+        (r) =>
+          r.cliente_nome === agendamento.cliente_nome &&
+          r.status === "agendada" &&
+          r.data_reuniao >= hojeISO &&
+          r.data_reuniao <= limiteISO,
+      );
+      if (cicloCoberto) continue;
       candidatas.set(chave, {
         cliente_nome: agendamento.cliente_nome,
         consultora_id: agendamento.consultora_id,

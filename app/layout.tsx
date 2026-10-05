@@ -48,7 +48,7 @@ export default function RootLayout({
               </div>
             </SidebarProvider>
           </SearchProvider>
-          <Toaster richColors position="top-right" />
+          <Toaster richColors position="top-right" duration={3000} />
         </ThemeProvider>
       </body>
     </html>
