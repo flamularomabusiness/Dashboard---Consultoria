@@ -117,6 +117,7 @@ export const mockContratos: Contrato[] = [
     contexto_perfil_cliente:
       "Cliente exigente com prazos, prefere reuniões pela manhã. Sócio principal é o ponto de contato.",
     consultora_id: "consultora-1",
+    conselheiro: "Roberto Alves",
     produtoNome: "CONSULTORIA FINANCEIRA",
   },
   {
@@ -125,6 +126,7 @@ export const mockContratos: Contrato[] = [
     status: "ativo",
     contexto_perfil_cliente: null,
     consultora_id: "consultora-1",
+    conselheiro: null,
     produtoNome: "CONSULTORIA FINANCEIRA",
   },
   {
@@ -133,6 +135,7 @@ export const mockContratos: Contrato[] = [
     status: "ativo",
     contexto_perfil_cliente: "Histórico de atraso em pagamentos. Acompanhar de perto o financeiro.",
     consultora_id: "consultora-2",
+    conselheiro: null,
     produtoNome: "CONSULTORIA GREEN+",
   },
   {
@@ -141,6 +144,7 @@ export const mockContratos: Contrato[] = [
     status: "ativo",
     contexto_perfil_cliente: null,
     consultora_id: "consultora-2",
+    conselheiro: null,
     produtoNome: "CONSULTORIA FINANCEIRA",
   },
   {
@@ -149,6 +153,7 @@ export const mockContratos: Contrato[] = [
     status: "ativo",
     contexto_perfil_cliente: null,
     consultora_id: null,
+    conselheiro: null,
     produtoNome: "CONSULTORIA GREEN+",
   },
 ];

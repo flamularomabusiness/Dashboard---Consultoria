@@ -17,7 +17,9 @@ import {
 } from "@/components/ui/select";
 import { ClienteCard } from "@/components/ClienteCard";
 import { ClienteModal } from "@/components/ClienteModal";
+import { EditClienteModal } from "@/components/EditClienteModal";
 import { StatsCard } from "@/components/StatsCard";
+import { atualizarContratoInsight, type CamposContratoInsight } from "@/lib/contratos";
 import { useBusca } from "@/lib/search-context";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { mockClientesCRM, mockConsultoras, mockContratos, mockReunioes } from "@/lib/mock-data";
@@ -58,6 +60,7 @@ export default function ClientesPage() {
 
   const [clienteDetalhes, setClienteDetalhes] = React.useState<ClienteCRM | null>(null);
   const [modalAberto, setModalAberto] = React.useState(false);
+  const [edicaoClienteId, setEdicaoClienteId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     async function carregarDados() {
@@ -85,7 +88,7 @@ export default function ClientesPage() {
             supabase
               .from("contratos")
               .select(
-                "id,cliente_id,status,contexto_perfil_cliente,consultora_id,produtos!inner(nome)",
+                "id,cliente_id,status,contexto_perfil_cliente,consultora_id,conselheiro,produtos!inner(nome)",
               )
               .in("produtos.nome", PRODUTOS_PERMITIDOS),
           ]);
@@ -98,6 +101,7 @@ export default function ClientesPage() {
             status: c.status,
             contexto_perfil_cliente: c.contexto_perfil_cliente,
             consultora_id: c.consultora_id,
+            conselheiro: c.conselheiro ?? null,
             produtoNome: (c.produtos as unknown as { nome: string } | null)?.nome ?? null,
           }));
           setClientes(filtrarClientesPermitidos(clientesData ?? [], contratosPermitidos));
@@ -185,6 +189,25 @@ export default function ClientesPage() {
   function abrirDetalhes(cliente: ClienteCRM) {
     setClienteDetalhes(cliente);
     setModalAberto(true);
+  }
+
+  const clienteEdicao = clientes.find((c) => c.id === edicaoClienteId) ?? null;
+
+  async function salvarDadosCliente(contratoId: string, campos: CamposContratoInsight) {
+    await atualizarContratoInsight(contratoId, campos);
+    const { conselheiro, ...demais } = campos;
+    setContratos((atual) =>
+      atual.map((c) =>
+        c.id === contratoId
+          ? {
+              ...c,
+              ...demais,
+              ...(conselheiro !== undefined && { conselheiro: conselheiro || null }),
+            }
+          : c,
+      ),
+    );
+    toast.success("Dados do cliente atualizados");
   }
 
   // Sempre sobre o total de clientes (antes dos filtros), igual ao resumo da página "/".
@@ -294,6 +317,7 @@ export default function ClientesPage() {
               consultora={consultoraDoContrato(contratoDoCliente(cliente))}
               ultimasReunioes={ultimasReunioesDoCliente(cliente)}
               onVerDetalhes={() => abrirDetalhes(cliente)}
+              onEditar={() => setEdicaoClienteId(cliente.id)}
             />
           ))}
         </section>
@@ -311,6 +335,16 @@ export default function ClientesPage() {
         ultimasReunioes={clienteDetalhes ? ultimasReunioesDoCliente(clienteDetalhes) : []}
         open={modalAberto}
         onOpenChange={setModalAberto}
+        onEditar={() => clienteDetalhes && setEdicaoClienteId(clienteDetalhes.id)}
+      />
+
+      <EditClienteModal
+        cliente={clienteEdicao}
+        contrato={clienteEdicao ? contratoDoCliente(clienteEdicao) : null}
+        consultoras={consultoras}
+        open={clienteEdicao !== null}
+        onOpenChange={(open) => !open && setEdicaoClienteId(null)}
+        onSalvar={salvarDadosCliente}
       />
     </main>
   );

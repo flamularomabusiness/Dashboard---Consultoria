@@ -95,6 +95,45 @@ create table if not exists clientes (
 --     sem FK declarada entre as duas (tabelas de projetos diferentes).
 --   produto_id uuid references produtos(id)
 --
+-- ---------------------------------------------------------------------------
+-- Edição de consultora / conselheiro / perfil-contexto pelo INSIGHT (/clientes)
+-- ---------------------------------------------------------------------------
+-- "conselheiro" só existe no INSIGHT (a plataforma não usa). Consultora e
+-- perfil/contexto são os campos da plataforma: editar no INSIGHT atualiza a
+-- mesma linha de contratos que a plataforma lê.
+--
+-- Em vez de liberar UPDATE na tabela contratos para o papel anon (a chave anon
+-- é pública e contratos guarda valor_mensal etc.), o app chama esta função, que
+-- só altera esses três campos — e só os que vierem no JSON.
+alter table contratos add column if not exists conselheiro text;
+
+create or replace function atualizar_contrato_insight(p_contrato_id uuid, p_campos jsonb)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  with atualizado as (
+    update contratos
+       set consultora_id = case when p_campos ? 'consultora_id'
+                                then nullif(p_campos->>'consultora_id', '')::uuid
+                                else consultora_id end,
+           conselheiro = case when p_campos ? 'conselheiro'
+                              then nullif(p_campos->>'conselheiro', '')
+                              else conselheiro end,
+           contexto_perfil_cliente = case when p_campos ? 'contexto_perfil_cliente'
+                                          then coalesce(p_campos->>'contexto_perfil_cliente', '')
+                                          else contexto_perfil_cliente end,
+           data_atualizacao = now()
+     where id = p_contrato_id
+    returning 1
+  )
+  select exists (select 1 from atualizado);
+$$;
+
+revoke all on function atualizar_contrato_insight(uuid, jsonb) from public;
+grant execute on function atualizar_contrato_insight(uuid, jsonb) to anon, authenticated;
+
 -- produtos (relevante pra este app):
 --   id uuid, nome text  -- ex.: "CONSULTORIA FINANCEIRA", exibido como rótulo
 --     acima do texto de contexto no modal de detalhes.

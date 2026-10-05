@@ -1,14 +1,17 @@
 // Modal de detalhes completos de um cliente, aberto pela ação "Ver Detalhes" na tabela.
 "use client";
 
+import { Pencil } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusClienteBadge } from "@/components/StatusClienteBadge";
 import type { ClienteCRM, Consultora, Contrato, Reuniao } from "@/lib/types";
@@ -24,6 +27,7 @@ interface ClienteModalProps {
   ultimasReunioes: Reuniao[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onEditar: () => void;
 }
 
 export function ClienteModal({
@@ -33,6 +37,7 @@ export function ClienteModal({
   ultimasReunioes,
   open,
   onOpenChange,
+  onEditar,
 }: ClienteModalProps) {
   if (!cliente) return null;
 
@@ -76,6 +81,13 @@ export function ClienteModal({
 
           <dt className="text-muted-foreground">Consultora</dt>
           <dd>{consultora?.nome ?? "-"}</dd>
+
+          <dt className="text-muted-foreground">Conselheiro(a)</dt>
+          <dd>
+            {contrato?.conselheiro || (
+              <span className="text-muted-foreground italic">Não informado</span>
+            )}
+          </dd>
 
           <dt className="text-muted-foreground">Próximo Marco</dt>
           <dd>
@@ -121,6 +133,15 @@ export function ClienteModal({
             </ul>
           )}
         </div>
+
+        {contrato && (
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onEditar}>
+              <Pencil className="size-4" />
+              Editar consultora, conselheiro e perfil
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );

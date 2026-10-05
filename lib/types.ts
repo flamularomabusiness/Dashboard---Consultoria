@@ -92,6 +92,8 @@ export interface Contrato {
   status: string;
   contexto_perfil_cliente: string | null;
   consultora_id: string | null;
+  /** Conselheiro(a) do cliente — preenchido manualmente no INSIGHT (a plataforma não tem esse campo). */
+  conselheiro: string | null;
   produtoNome: string | null;
 }
 

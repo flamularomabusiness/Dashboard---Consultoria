@@ -30,6 +30,7 @@ interface ClienteCardProps {
   /** Já filtradas pelo cliente e ordenadas da mais recente para a mais antiga. */
   ultimasReunioes: Reuniao[];
   onVerDetalhes: () => void;
+  onEditar: () => void;
 }
 
 export function ClienteCard({
@@ -37,6 +38,7 @@ export function ClienteCard({
   consultora,
   ultimasReunioes,
   onVerDetalhes,
+  onEditar,
 }: ClienteCardProps) {
   const marco = calcularProximoMarco(cliente.data_inicio_contrato);
 
@@ -103,9 +105,12 @@ export function ClienteCard({
             size="sm"
             variant="outline"
             className="rounded-full"
-            title="Editar (em breve)"
-            disabled
-            onClick={(e) => e.stopPropagation()}
+            title="Editar consultora, conselheiro e perfil"
+            aria-label={`Editar dados de ${cliente.nome_razao_social}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onEditar();
+            }}
           >
             <Pencil className="size-4" />
           </Button>
