@@ -7,9 +7,13 @@
 // (insere/atualiza) esses dados no Supabase, e nunca deve gravar dados
 // fictícios lá quando a planilha real não está configurada.
 import { NextResponse } from "next/server";
+import { exigirAcessoInsight } from "@/lib/auth-server";
 import { fetchAgendamentosFixos, isGoogleSheetsConfigured } from "@/lib/google-sheets";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const negado = await exigirAcessoInsight(request);
+  if (negado) return negado;
+
   const agendamentos = await fetchAgendamentosFixos();
   return NextResponse.json({ configurado: isGoogleSheetsConfigured, agendamentos });
 }

@@ -1,20 +1,20 @@
-// Header INSIGHT: busca + notificações + tema + perfil. Sem sistema de login
-// neste app ainda, então o avatar não tem "sair" — só um rótulo (ver nota em
-// handleLogoutPlaceholder, não implementado de propósito).
+// Header INSIGHT: busca + notificações + tema + perfil (com "Sair").
 "use client";
 
 import * as React from "react";
 import Image from "next/image";
 import { useTheme } from "next-themes";
-import { Bell, Menu, Moon, Search, Sun } from "lucide-react";
+import { Bell, LogOut, Menu, Moon, Search, Sun } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/lib/auth-context";
 import { useBusca } from "@/lib/search-context";
 import { useSidebarMobile } from "@/lib/sidebar-context";
 
@@ -111,25 +111,41 @@ function ThemeToggle() {
   );
 }
 
-/**
- * Sem autenticação neste app (nenhum login/sessão existe hoje) — por isso não
- * tem "Sair": um botão de logout que não desloga ninguém seria enganoso. Só
- * "Configurações" (desabilitado, ainda não existe) pra não ficar vazio.
- */
+/** Avatar com a inicial do usuário logado, nome/papel e "Sair". */
 function PerfilMenu() {
+  const { estado, sair } = useAuth();
+  if (estado.status !== "autorizado") return null;
+
+  const { nome, email, role } = estado.perfil;
+  const exibicao = nome?.trim() || email || "Usuário";
+  const inicial = exibicao.charAt(0).toUpperCase();
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
-          title="Perfil"
+          title={exibicao}
           className="ml-1 flex size-8 items-center justify-center rounded-full bg-white/15 text-sm font-semibold text-white md:bg-primary md:text-primary-foreground"
         >
           <span className="sr-only">Abrir menu de perfil</span>
-          R
+          {inicial}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem disabled>Configurações (em breve)</DropdownMenuItem>
+      <DropdownMenuContent align="end" className="w-60">
+        <div className="px-1.5 py-1.5">
+          <p className="truncate text-sm font-medium">{exibicao}</p>
+          {email && email !== exibicao && (
+            <p className="truncate text-xs text-muted-foreground">{email}</p>
+          )}
+          <p className="text-xs text-muted-foreground capitalize">
+            {role === "administrator" ? "Administrador" : role}
+          </p>
+        </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => void sair()}>
+          <LogOut className="size-4" />
+          Sair
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

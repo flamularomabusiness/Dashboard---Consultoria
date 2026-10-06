@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { Inter, Montserrat } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
-import { InsightHeader } from "@/components/InsightHeader";
-import { InsightSidebar } from "@/components/InsightSidebar";
+import { AppShell } from "@/components/AppShell";
+import { AuthProvider } from "@/lib/auth-context";
 import { SearchProvider } from "@/lib/search-context";
 import { SidebarProvider } from "@/lib/sidebar-context";
 import "./globals.css";
@@ -37,17 +37,13 @@ export default function RootLayout({
     >
       <body className="min-h-full">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <SearchProvider>
-            <SidebarProvider>
-              <div className="flex min-h-screen">
-                <InsightSidebar />
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <InsightHeader />
-                  <div className="flex flex-1 flex-col">{children}</div>
-                </div>
-              </div>
-            </SidebarProvider>
-          </SearchProvider>
+          <AuthProvider>
+            <SearchProvider>
+              <SidebarProvider>
+                <AppShell>{children}</AppShell>
+              </SidebarProvider>
+            </SearchProvider>
+          </AuthProvider>
           <Toaster richColors position="top-right" duration={3000} />
         </ThemeProvider>
       </body>

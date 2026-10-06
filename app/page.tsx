@@ -49,6 +49,7 @@ import {
   type CamposReuniao,
 } from "@/lib/reunioes";
 import { useBusca } from "@/lib/search-context";
+import { fetchAutenticado } from "@/lib/fetch-autenticado";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { syncAgendamentosFixosToReunioes } from "@/lib/sync-reunioes";
 import {
@@ -196,8 +197,8 @@ export default function DashboardPage() {
       setCarregando(true);
       try {
         const [respostaClientes, respostaAgendamentosSheet] = await Promise.all([
-          fetch("/api/clientes"),
-          fetch("/api/agendamentos-fixos"),
+          fetchAutenticado("/api/clientes"),
+          fetchAutenticado("/api/agendamentos-fixos"),
         ]);
 
         const clientesDaSheet: Cliente[] = respostaClientes.ok
