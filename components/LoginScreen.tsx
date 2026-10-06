@@ -4,12 +4,39 @@
 
 import * as React from "react";
 import Image from "next/image";
-import { Loader2, LogOut } from "lucide-react";
+import { useTheme } from "next-themes";
+import { Loader2, LogOut, Moon, Sun } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth-context";
+
+/** Alternador claro/noturno no canto da tela (o header do app ainda não existe aqui). */
+function ThemeToggle() {
+  const { resolvedTheme, setTheme } = useTheme();
+  const [montado, setMontado] = React.useState(false);
+
+  // Evita mismatch de hidratação: no server não sabemos a preferência salva.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  React.useEffect(() => setMontado(true), []);
+
+  const escuro = montado && resolvedTheme === "dark";
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="absolute top-4 right-4 z-10 rounded-full border-black/10 bg-white/60 text-brand-navy backdrop-blur-sm hover:bg-white/80 dark:border-white/20 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
+      onClick={() => setTheme(escuro ? "light" : "dark")}
+      aria-label="Alternar tema claro/noturno"
+    >
+      {escuro ? <Sun className="size-4" /> : <Moon className="size-4" />}
+      {escuro ? "Claro" : "Noturno"}
+    </Button>
+  );
+}
 
 export function LoginScreen() {
   const { estado, entrar, sair } = useAuth();
@@ -32,8 +59,20 @@ export function LoginScreen() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-brand-navy px-4 py-10">
-      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-card p-6 text-card-foreground shadow-xl">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-[#dbeafe] via-[#d3f1f0] to-[#c9f5e3] px-4 py-10 dark:from-[#001c6b] dark:via-[#05407a] dark:to-[#0a6b5c]">
+      {/* Brilhos suaves por cima do degradê, só pra dar profundidade. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-32 -left-32 size-96 rounded-full bg-brand-blue/20 blur-3xl dark:bg-brand-blue/30"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-32 -bottom-32 size-96 rounded-full bg-brand-green/25 blur-3xl dark:bg-brand-green/20"
+      />
+
+      <ThemeToggle />
+
+      <div className="relative w-full max-w-sm rounded-2xl border border-white/60 bg-card/90 p-6 text-card-foreground shadow-xl backdrop-blur-sm dark:border-white/10 dark:bg-card/85">
         <div className="mb-6 flex justify-center rounded-xl bg-brand-navy p-4">
           <Image
             src="/logo-insight.png"
