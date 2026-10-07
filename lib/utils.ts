@@ -275,6 +275,87 @@ export function resolverConsultoraId(
   return consultoras.find((c) => c.nome.trim().toLowerCase() === alvo)?.id ?? null;
 }
 
+/** Reunião nova a inserir, gerada a partir de um agendamento fixo. */
+export type ReuniaoGerada = Omit<Reuniao, "id" | "created_at">;
+
+/**
+ * Decide quais reuniões "agendada" criar a partir dos agendamentos fixos (função
+ * pura — a gravação fica em lib/sync-reunioes.ts). Regras, por agendamento ativo:
+ * 1. Próxima ocorrência do dia fixo (hoje conta). Não cria se já existe reunião do
+ *    cliente nessa data, ou se o ciclo já está coberto por uma "agendada" de hoje
+ *    até 6 dias depois da ocorrência (reunião remarcada — senão remarcar de
+ *    segunda para terça faria o sistema recriar a segunda).
+ * 2. Se a ocorrência é HOJE, também garante a da semana seguinte (+7 dias).
+ *    Sem isso, no dia da reunião a coluna "Próxima Reunião" ficaria vazia até o dia
+ *    seguinte. Não cria se o cliente já tem alguma "agendada" depois de hoje
+ *    (inclui reunião remarcada para amanhã).
+ * Deduplica entre agendamentos repetidos do mesmo cliente.
+ */
+export function planejarReunioesAutomaticas(
+  agendamentosFixos: AgendamentoFixo[],
+  reunioesExistentes: Reuniao[],
+  hoje: Date = new Date(),
+): ReuniaoGerada[] {
+  const existentes = new Set(reunioesExistentes.map((r) => `${r.cliente_nome}|${r.data_reuniao}`));
+  const candidatas = new Map<string, ReuniaoGerada>();
+  const hojeISO = dataLocalISO(hoje);
+
+  const adicionar = (agendamento: AgendamentoFixo, dataReuniao: string) => {
+    candidatas.set(`${agendamento.cliente_nome}|${dataReuniao}`, {
+      cliente_nome: agendamento.cliente_nome,
+      consultora_id: agendamento.consultora_id,
+      data_reuniao: dataReuniao,
+      status: "agendada",
+      zoom_email_recebido: false,
+      data_ata_recebida: null,
+      resumo_zoom: null,
+      arquivo_drive_link: null,
+      finalizada_em: null,
+    });
+  };
+  const jaTemFuturaAgendada = (clienteNome: string) =>
+    reunioesExistentes.some(
+      (r) => r.cliente_nome === clienteNome && r.status === "agendada" && r.data_reuniao > hojeISO,
+    ) ||
+    Array.from(candidatas.values()).some(
+      (c) => c.cliente_nome === clienteNome && c.data_reuniao > hojeISO,
+    );
+
+  for (const agendamento of agendamentosFixos) {
+    if (agendamento.ativo === false) continue;
+
+    const ocorrencia = proximaOcorrenciaDiaSemana(agendamento.dia_semana, hoje);
+    const dataReuniao = format(ocorrencia, "yyyy-MM-dd");
+    const chave = `${agendamento.cliente_nome}|${dataReuniao}`;
+
+    if (!existentes.has(chave) && !candidatas.has(chave)) {
+      const limiteISO = format(addDays(ocorrencia, 6), "yyyy-MM-dd");
+      const cicloCoberto = reunioesExistentes.some(
+        (r) =>
+          r.cliente_nome === agendamento.cliente_nome &&
+          r.status === "agendada" &&
+          r.data_reuniao >= hojeISO &&
+          r.data_reuniao <= limiteISO,
+      );
+      if (!cicloCoberto) adicionar(agendamento, dataReuniao);
+    }
+
+    if (dataReuniao === hojeISO) {
+      const proxima = format(addDays(ocorrencia, 7), "yyyy-MM-dd");
+      const chaveProxima = `${agendamento.cliente_nome}|${proxima}`;
+      if (
+        !existentes.has(chaveProxima) &&
+        !candidatas.has(chaveProxima) &&
+        !jaTemFuturaAgendada(agendamento.cliente_nome)
+      ) {
+        adicionar(agendamento, proxima);
+      }
+    }
+  }
+
+  return Array.from(candidatas.values());
+}
+
 export interface PlanoSincronizacaoAgendamentos {
   paraInserir: AgendamentoFixoSheet[];
   paraAtualizar: Array<{ atual: AgendamentoFixo; novo: AgendamentoFixoSheet }>;
