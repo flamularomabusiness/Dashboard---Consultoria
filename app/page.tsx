@@ -71,6 +71,7 @@ import type {
   StatusReuniaoCalculado,
 } from "@/lib/types";
 import {
+  calcularStatsReunioes,
   calcularStatusReuniao,
   diasDesde,
   estaNaSemanaAtual,
@@ -356,23 +357,25 @@ export default function DashboardPage() {
   ]);
 
   /**
-   * Stats do topo: contagem direta sobre as reuniões em si, usando o mesmo
-   * `calcularStatusReuniao` da tabela e do modal (nunca o status cru do banco).
-   * "Atrasadas" = reunião agendada cuja data já passou.
+   * Stats do topo, calculados direto das reuniões já carregadas (reagem a criar,
+   * editar, remarcar e deletar) e respeitando o filtro de consultora:
+   * - Finalizadas / Taxa de Sucesso: só a semana atual (segunda a domingo).
+   *   Taxa = finalizadas da semana / todas as reuniões da semana (qualquer status).
+   * - Pendente Drive / Atrasadas: todas as datas, usando o mesmo
+   *   `calcularStatusReuniao` da tabela e do modal ("atrasado" não existe no banco).
    */
   const resumo = React.useMemo(() => {
-    const hoje = new Date();
-    const contagem = { completa: 0, pendente_drive: 0, atrasado: 0 };
-    for (const r of reunioes) {
-      const status = calcularStatusReuniao(r, hoje);
-      if (status === "finalizada") contagem.completa += 1;
-      else if (status === "pendente_drive") contagem.pendente_drive += 1;
-      else if (status === "atrasado") contagem.atrasado += 1;
-    }
-    const taxaSucesso =
-      reunioes.length === 0 ? 0 : Math.round((contagem.completa / reunioes.length) * 100);
-    return { ...contagem, taxaSucesso };
-  }, [reunioes]);
+    const doFiltro =
+      filtroConsultora === "todas"
+        ? reunioes
+        : reunioes.filter((r) => {
+            const consultoraDoCliente = clientes.find(
+              (c) => c.cliente_nome === r.cliente_nome,
+            )?.consultora_id;
+            return (consultoraDoCliente ?? r.consultora_id) === filtroConsultora;
+          });
+    return calcularStatsReunioes(doFiltro);
+  }, [reunioes, clientes, filtroConsultora]);
 
   // Para cada agendamento fixo, calcula a próxima ocorrência do dia da semana
   // e verifica se já existe uma reunião registrada para essa data -> "Marcada".
@@ -550,11 +553,26 @@ export default function DashboardPage() {
       </header>
 
       {/* Stats row */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatsCard label="Completas" value={resumo.completa} icon={CheckCircle2} />
-        <StatsCard label="Pendente Drive" value={resumo.pendente_drive} icon={FolderOpen} />
-        <StatsCard label="Atrasadas" value={resumo.atrasado} icon={AlertCircle} />
-        <StatsCard label="Taxa de Sucesso" value={`${resumo.taxaSucesso}%`} icon={TrendingUp} />
+      <section className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <StatsCard
+          label="Finalizadas"
+          subtitle="Esta semana"
+          value={resumo.finalizadasSemana}
+          icon={CheckCircle2}
+        />
+        <StatsCard
+          label="Pendente Drive"
+          subtitle="Total"
+          value={resumo.pendenteDrive}
+          icon={FolderOpen}
+        />
+        <StatsCard label="Atrasadas" subtitle="Total" value={resumo.atrasadas} icon={AlertCircle} />
+        <StatsCard
+          label="Taxa de Sucesso"
+          subtitle="Esta semana"
+          value={`${resumo.taxaSucessoSemana}%`}
+          icon={TrendingUp}
+        />
       </section>
 
       {/* Filtros */}

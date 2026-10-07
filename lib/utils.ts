@@ -68,6 +68,61 @@ export function calcularStatusReuniao(
 }
 
 /**
+ * Semana atual (segunda a domingo) como datas "yyyy-MM-dd" no fuso local, prontas
+ * para comparar com `data_reuniao` por string (sem horas, sem UTC).
+ */
+export function obterSemanaAtual(hoje: Date = new Date()): { inicio: string; fim: string } {
+  return {
+    inicio: format(startOfWeek(hoje, { weekStartsOn: 1 }), "yyyy-MM-dd"),
+    fim: format(endOfWeek(hoje, { weekStartsOn: 1 }), "yyyy-MM-dd"),
+  };
+}
+
+export interface StatsReunioes {
+  /** Finalizadas com data na semana atual. */
+  finalizadasSemana: number;
+  /** Todas as reuniões da semana atual, em qualquer status. */
+  totalSemana: number;
+  /** finalizadasSemana / totalSemana, arredondado; 0 se não há reunião na semana. */
+  taxaSucessoSemana: number;
+  /** Reuniões com ATA recebida e Drive pendente (todas as datas). */
+  pendenteDrive: number;
+  /** Reuniões agendadas com data já passada (todas as datas). */
+  atrasadas: number;
+}
+
+/** Números dos cards do topo do dashboard, calculados a partir da lista de reuniões. */
+export function calcularStatsReunioes(
+  reunioes: Pick<Reuniao, "status" | "data_reuniao">[],
+  hoje: Date = new Date(),
+): StatsReunioes {
+  const { inicio, fim } = obterSemanaAtual(hoje);
+  let finalizadasSemana = 0;
+  let totalSemana = 0;
+  let pendenteDrive = 0;
+  let atrasadas = 0;
+
+  for (const r of reunioes) {
+    const status = calcularStatusReuniao(r, hoje);
+    const data = r.data_reuniao.slice(0, 10);
+    if (data >= inicio && data <= fim) {
+      totalSemana += 1;
+      if (status === "finalizada") finalizadasSemana += 1;
+    }
+    if (status === "pendente_drive") pendenteDrive += 1;
+    else if (status === "atrasado") atrasadas += 1;
+  }
+
+  return {
+    finalizadasSemana,
+    totalSemana,
+    taxaSucessoSemana: totalSemana > 0 ? Math.round((finalizadasSemana / totalSemana) * 100) : 0,
+    pendenteDrive,
+    atrasadas,
+  };
+}
+
+/**
  * Uma reunião "agendada" já é considerada "ocorrida" a partir da sua data
  * (inclusive hoje, mesmo sem nenhuma ação manual) — evita a necessidade de um
  * passo extra só para marcar que a reunião aconteceu antes de poder registrar a ATA.

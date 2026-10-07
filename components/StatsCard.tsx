@@ -9,11 +9,13 @@ interface StatsCardProps {
   label: string;
   value: React.ReactNode;
   icon: LucideIcon;
+  /** Texto pequeno abaixo do rótulo, ex.: "Esta semana". */
+  subtitle?: string;
   trend?: { valor: string; direcao: "alta" | "baixa" };
   className?: string;
 }
 
-export function StatsCard({ label, value, icon: Icon, trend, className }: StatsCardProps) {
+export function StatsCard({ label, value, icon: Icon, subtitle, trend, className }: StatsCardProps) {
   return (
     <Card
       className={cn(
@@ -23,7 +25,10 @@ export function StatsCard({ label, value, icon: Icon, trend, className }: StatsC
       )}
     >
       <CardHeader className="flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
+        <div className="min-w-0">
+          <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
+          {subtitle && <p className="mt-0.5 text-xs text-muted-foreground/80">{subtitle}</p>}
+        </div>
         <Icon className="size-5 text-brand-green" />
       </CardHeader>
       <CardContent className="flex items-end justify-between gap-2">
