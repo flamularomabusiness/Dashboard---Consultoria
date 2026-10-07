@@ -40,18 +40,20 @@ export interface Reuniao {
 }
 
 /**
- * Status visual exibido na tabela principal, derivado de `Reuniao.status`
- * combinado com a quantidade de dias desde a última reunião.
+ * Status exibido na tela (tabela, modal, filtros e contadores): os 3 do banco mais
+ * "atrasado", que NÃO é gravado no banco — é calculado na exibição por
+ * `calcularStatusReuniao` (reunião ainda "agendada" cuja data já passou).
  */
-export type StatusVisual = "completa" | "pendente_drive" | "atrasado";
+export type StatusReuniaoCalculado = StatusReuniao | "atrasado";
 
 /** Linha calculada exibida na tabela principal: cliente + sua reunião mais relevante. */
 export interface LinhaCliente {
   cliente: Cliente;
-  ultimaReuniao: Reuniao | null; // reunião mais recente já ocorrida
+  ultimaReuniao: Reuniao | null; // reunião mais recente já ocorrida (ou de hoje)
   proximaReuniao: Reuniao | null; // próxima reunião agendada (futura)
   diasDesdeUltimaReuniao: number | null;
-  statusVisual: StatusVisual;
+  /** Status da reunião que precisa de atenção (ver `reuniaoEmFoco`); null se o cliente não tem reunião. */
+  statusReuniao: StatusReuniaoCalculado | null;
 }
 
 /** Status comercial/contratual de um cliente (tabela Supabase "clientes"). */

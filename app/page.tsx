@@ -68,16 +68,17 @@ import type {
   LinhaCliente,
   Reuniao,
   StatusReuniao,
-  StatusVisual,
+  StatusReuniaoCalculado,
 } from "@/lib/types";
 import {
-  calcularStatusVisual,
+  calcularStatusReuniao,
   diasDesde,
   estaNaSemanaAtual,
   formatarData,
   planejarSincronizacaoAgendamentos,
   proximaOcorrenciaDiaSemana,
   resolverConsultoraId,
+  reuniaoEmFoco,
   separarUltimaEProximaReuniao,
 } from "@/lib/utils";
 import { addDays, format, isBefore, parseISO, startOfDay } from "date-fns";
@@ -98,7 +99,7 @@ export default function DashboardPage() {
   const [carregando, setCarregando] = React.useState(true);
 
   const [filtroConsultora, setFiltroConsultora] = React.useState("todas");
-  const [filtroStatus, setFiltroStatus] = React.useState<StatusVisual | "todos">("todos");
+  const [filtroStatus, setFiltroStatus] = React.useState<StatusReuniaoCalculado | "todos">("todos");
   const [apenasSemReuniaoSemana, setApenasSemReuniaoSemana] = React.useState(false);
   const [apenasFaltandoSemana, setApenasFaltandoSemana] = React.useState(false);
   const [apenasAtrasados, setApenasAtrasados] = React.useState(false);
@@ -288,12 +289,13 @@ export default function DashboardPage() {
         reunioesDoCliente,
         hoje,
       );
+      const emFoco = reuniaoEmFoco(ultimaReuniao, proximaReuniao, hoje);
       return {
         cliente,
         ultimaReuniao,
         proximaReuniao,
         diasDesdeUltimaReuniao: diasDesde(ultimaReuniao?.data_reuniao, hoje),
-        statusVisual: calcularStatusVisual(ultimaReuniao, hoje),
+        statusReuniao: emFoco ? calcularStatusReuniao(emFoco, hoje) : null,
       };
     });
   }, [clientes, reunioes]);
@@ -313,7 +315,7 @@ export default function DashboardPage() {
       if (filtroConsultora !== "todas" && linha.cliente.consultora_id !== filtroConsultora) {
         return false;
       }
-      if (filtroStatus !== "todos" && linha.statusVisual !== filtroStatus) {
+      if (filtroStatus !== "todos" && linha.statusReuniao !== filtroStatus) {
         return false;
       }
       if (apenasSemReuniaoSemana) {
@@ -334,7 +336,7 @@ export default function DashboardPage() {
       }
       if (apenasAtrasados) {
         const temAtrasada = reunioesDoCliente.some(
-          (r) => r.status === "agendada" && isBefore(parseISO(r.data_reuniao), startOfDay(hoje)),
+          (r) => calcularStatusReuniao(r, hoje) === "atrasado",
         );
         if (!temAtrasada) return false;
       }
@@ -354,25 +356,19 @@ export default function DashboardPage() {
   ]);
 
   /**
-   * Stats do topo (Completas/Pendente Drive/Atrasadas): contagem direta sobre
-   * as reuniões em si, não o resumo por cliente usado nas linhas da tabela
-   * (`linha.statusVisual`, que olha só a última reunião de cada cliente e
-   * perdoa alguns dias antes de marcar como atrasado). Aqui "atrasada" é
-   * literal: reunião agendada cuja data já passou.
+   * Stats do topo: contagem direta sobre as reuniões em si, usando o mesmo
+   * `calcularStatusReuniao` da tabela e do modal (nunca o status cru do banco).
+   * "Atrasadas" = reunião agendada cuja data já passou.
    */
   const resumo = React.useMemo(() => {
-    const hoje = startOfDay(new Date());
-    const contagem = reunioes.reduce(
-      (acc, r) => {
-        if (r.status === "finalizada") acc.completa += 1;
-        else if (r.status === "pendente_drive") acc.pendente_drive += 1;
-        if (r.status === "agendada" && isBefore(parseISO(r.data_reuniao), hoje)) {
-          acc.atrasado += 1;
-        }
-        return acc;
-      },
-      { completa: 0, pendente_drive: 0, atrasado: 0 } as Record<StatusVisual, number>,
-    );
+    const hoje = new Date();
+    const contagem = { completa: 0, pendente_drive: 0, atrasado: 0 };
+    for (const r of reunioes) {
+      const status = calcularStatusReuniao(r, hoje);
+      if (status === "finalizada") contagem.completa += 1;
+      else if (status === "pendente_drive") contagem.pendente_drive += 1;
+      else if (status === "atrasado") contagem.atrasado += 1;
+    }
     const taxaSucesso =
       reunioes.length === 0 ? 0 : Math.round((contagem.completa / reunioes.length) * 100);
     return { ...contagem, taxaSucesso };
@@ -409,7 +405,7 @@ export default function DashboardPage() {
 
   async function agendarReuniao(clienteNome: string, data: Date) {
     const consultoraId = clientes.find((c) => c.cliente_nome === clienteNome)?.consultora_id;
-    const dataISO = data.toISOString().slice(0, 10);
+    const dataISO = format(data, "yyyy-MM-dd"); // data LOCAL (toISOString converteria para UTC)
 
     const novaReuniao: Reuniao = {
       id: crypto.randomUUID(),
@@ -580,16 +576,17 @@ export default function DashboardPage() {
 
           <Select
             value={filtroStatus}
-            onValueChange={(valor) => setFiltroStatus(valor as StatusVisual | "todos")}
+            onValueChange={(valor) => setFiltroStatus(valor as StatusReuniaoCalculado | "todos")}
           >
             <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos os status</SelectItem>
-              <SelectItem value="completa">✅ Completa</SelectItem>
+              <SelectItem value="agendada">📅 Agendada</SelectItem>
               <SelectItem value="pendente_drive">📁 Pendente Drive</SelectItem>
               <SelectItem value="atrasado">🔴 Atrasado</SelectItem>
+              <SelectItem value="finalizada">✅ Finalizada</SelectItem>
             </SelectContent>
           </Select>
 
@@ -680,7 +677,11 @@ export default function DashboardPage() {
                           : `${linha.diasDesdeUltimaReuniao} dia(s)`}
                       </TableCell>
                       <TableCell>
-                        <StatusBadge status={linha.statusVisual} />
+                        {linha.statusReuniao ? (
+                          <StatusBadge status={linha.statusReuniao} />
+                        ) : (
+                          <span className="text-sm text-muted-foreground">Sem reunião</span>
+                        )}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         <DataClicavel reuniao={linha.proximaReuniao} onClick={setDetalhesId} />

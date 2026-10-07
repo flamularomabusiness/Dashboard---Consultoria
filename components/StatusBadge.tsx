@@ -1,14 +1,15 @@
-// Badge visual de status: verde (completa), laranja (pendente_drive) ou vermelho (atrasado).
+// Badge visual do status de uma reunião (ver `calcularStatusReuniao` em lib/utils.ts):
+// azul (agendada), laranja (pendente_drive), vermelho (atrasado) ou verde (finalizada).
+// Usado pela tabela e pelo modal de detalhes — assim os dois mostram sempre o mesmo.
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { StatusVisual } from "@/lib/types";
+import type { StatusReuniaoCalculado } from "@/lib/types";
 
-const CONFIG: Record<StatusVisual, { label: string; icone: string; className: string }> = {
-  completa: {
-    label: "Completa",
-    icone: "✅",
-    className:
-      "bg-green-100 text-green-800 border-green-300 dark:bg-green-950 dark:text-green-300 dark:border-green-800",
+const CONFIG: Record<StatusReuniaoCalculado, { label: string; icone: string; className: string }> = {
+  agendada: {
+    label: "Agendada",
+    icone: "📅",
+    className: "border-brand-blue/40 bg-brand-blue/10 text-brand-blue dark:text-brand-green",
   },
   pendente_drive: {
     label: "Pendente Drive",
@@ -22,9 +23,15 @@ const CONFIG: Record<StatusVisual, { label: string; icone: string; className: st
     className:
       "bg-red-100 text-red-800 border-red-300 dark:bg-red-950 dark:text-red-300 dark:border-red-800",
   },
+  finalizada: {
+    label: "Finalizada",
+    icone: "✅",
+    className:
+      "bg-green-100 text-green-800 border-green-300 dark:bg-green-950 dark:text-green-300 dark:border-green-800",
+  },
 };
 
-export function StatusBadge({ status }: { status: StatusVisual }) {
+export function StatusBadge({ status }: { status: StatusReuniaoCalculado }) {
   const { label, icone, className } = CONFIG[status];
   return (
     <Badge variant="outline" className={cn("gap-1 font-medium", className)}>

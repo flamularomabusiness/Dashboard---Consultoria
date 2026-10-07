@@ -4,7 +4,6 @@
 
 import { CalendarClock, ExternalLink, Pencil, Trash2 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,34 +13,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { Reuniao, StatusReuniao } from "@/lib/types";
-import { cn, diasDesde, formatarData } from "@/lib/utils";
-
-const STATUS_CONFIG: Record<StatusReuniao, { label: string; className: string }> = {
-  agendada: {
-    label: "Agendada",
-    className: "border-brand-blue/40 bg-brand-blue/10 text-brand-blue dark:text-brand-green",
-  },
-  pendente_drive: {
-    label: "Pendente Drive",
-    className:
-      "border-orange-300 bg-orange-100 text-orange-800 dark:border-orange-800 dark:bg-orange-950 dark:text-orange-300",
-  },
-  finalizada: {
-    label: "Finalizada",
-    className:
-      "border-green-300 bg-green-100 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300",
-  },
-};
-
-function StatusReuniaoBadge({ status }: { status: StatusReuniao }) {
-  const { label, className } = STATUS_CONFIG[status];
-  return (
-    <Badge variant="outline" className={cn("font-medium", className)}>
-      {label}
-    </Badge>
-  );
-}
+import { StatusBadge } from "@/components/StatusBadge";
+import type { Reuniao } from "@/lib/types";
+import { calcularStatusReuniao, cn, diasDesde, formatarData } from "@/lib/utils";
 
 function textoDiasDesde(dataISO: string): string {
   const dias = diasDesde(dataISO);
@@ -94,7 +68,7 @@ export function ReuniaoDetalhesModal({
                 <dd>{formatarData(reuniao.data_reuniao)}</dd>
                 <dt className="text-muted-foreground">Status</dt>
                 <dd>
-                  <StatusReuniaoBadge status={reuniao.status} />
+                  <StatusBadge status={calcularStatusReuniao(reuniao)} />
                 </dd>
               </dl>
             </Secao>
@@ -136,7 +110,7 @@ export function ReuniaoDetalhesModal({
                       )}
                     >
                       <span className="font-medium">{formatarData(item.data_reuniao)}</span>
-                      <StatusReuniaoBadge status={item.status} />
+                      <StatusBadge status={calcularStatusReuniao(item)} />
                       <span className="text-xs text-muted-foreground">
                         {textoDiasDesde(item.data_reuniao)}
                       </span>

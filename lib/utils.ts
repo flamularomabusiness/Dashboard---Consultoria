@@ -17,11 +17,8 @@ import type {
   AgendamentoFixoSheet,
   Consultora,
   Reuniao,
-  StatusVisual,
+  StatusReuniaoCalculado,
 } from "@/lib/types";
-
-/** Prazo (em dias) a partir do qual uma reunião sem ATA finalizada é considerada atrasada. */
-export const LIMITE_DIAS_ATRASO = 7;
 
 /** Formata uma data ISO para o padrão brasileiro (dd/MM/yyyy). Retorna "-" se vazia. */
 export function formatarData(dataISO: string | null | undefined): string {
@@ -45,12 +42,38 @@ export function diasDesde(
 }
 
 /**
+ * Data de `hoje` no fuso LOCAL, como "yyyy-MM-dd". Não use `toISOString()` para
+ * isso: ele converte para UTC, e no Brasil (UTC-3) depois das 21h o "dia" UTC já
+ * é o de amanhã — uma reunião de hoje apareceria como atrasada.
+ */
+export function dataLocalISO(hoje: Date = new Date()): string {
+  return format(hoje, "yyyy-MM-dd");
+}
+
+/**
+ * ÚNICA fonte da verdade do status exibido de uma reunião (tabela, modal,
+ * filtros e contadores devem usar só esta função):
+ * - finalizada / pendente_drive (no banco) -> iguais
+ * - agendada e data >= hoje -> "agendada" (inclui hoje)
+ * - agendada e data < hoje -> "atrasado" (calculado, não é gravado no banco)
+ * Compara datas como strings "yyyy-MM-dd" (sem horas, sem fuso).
+ */
+export function calcularStatusReuniao(
+  reuniao: Pick<Reuniao, "status" | "data_reuniao">,
+  hoje: Date = new Date(),
+): StatusReuniaoCalculado {
+  if (reuniao.status === "finalizada") return "finalizada";
+  if (reuniao.status === "pendente_drive") return "pendente_drive";
+  return reuniao.data_reuniao.slice(0, 10) < dataLocalISO(hoje) ? "atrasado" : "agendada";
+}
+
+/**
  * Uma reunião "agendada" já é considerada "ocorrida" a partir da sua data
- * (mesmo sem nenhuma ação manual) — evita a necessidade de um passo extra só
- * para marcar que a reunião aconteceu antes de poder registrar a ATA.
+ * (inclusive hoje, mesmo sem nenhuma ação manual) — evita a necessidade de um
+ * passo extra só para marcar que a reunião aconteceu antes de poder registrar a ATA.
  */
 function reuniaoJaOcorreu(reuniao: Reuniao, hoje: Date = new Date()): boolean {
-  return reuniao.status !== "agendada" || !isAfter(parseISO(reuniao.data_reuniao), hoje);
+  return reuniao.status !== "agendada" || reuniao.data_reuniao.slice(0, 10) <= dataLocalISO(hoje);
 }
 
 /** Dada todas as reuniões de um cliente, separa a última já realizada da próxima agendada. */
@@ -73,22 +96,21 @@ export function separarUltimaEProximaReuniao(
 }
 
 /**
- * Deriva o status visual (✅ completa / 📁 pendente_drive / 🔴 atrasado) a partir
- * da última reunião realizada:
- * - Sem reunião registrada, ou atrasada há mais de `LIMITE_DIAS_ATRASO` dias -> atrasado
- * - ATA já finalizada -> completa
- * - Caso contrário (ainda sem ATA ou já com ATA, aguardando o link do Drive) -> pendente_drive
+ * Reunião que define o status mostrado na linha do cliente — a que precisa de atenção:
+ * 1. a última (já ocorrida/de hoje), se ainda não estiver finalizada (agendada, pendente ou atrasada);
+ * 2. senão, a próxima agendada (futura), se houver;
+ * 3. senão, a última (finalizada).
+ * `null` se o cliente não tem nenhuma reunião.
  */
-export function calcularStatusVisual(
+export function reuniaoEmFoco(
   ultimaReuniao: Reuniao | null,
+  proximaReuniao: Reuniao | null,
   hoje: Date = new Date(),
-): StatusVisual {
-  if (!ultimaReuniao) return "atrasado";
-  if (ultimaReuniao.status === "finalizada") return "completa";
-
-  const dias = diasDesde(ultimaReuniao.data_reuniao, hoje) ?? 0;
-  if (dias > LIMITE_DIAS_ATRASO) return "atrasado";
-  return "pendente_drive";
+): Reuniao | null {
+  if (ultimaReuniao && calcularStatusReuniao(ultimaReuniao, hoje) !== "finalizada") {
+    return ultimaReuniao;
+  }
+  return proximaReuniao ?? ultimaReuniao;
 }
 
 /** Verifica se uma data ISO cai dentro da semana atual (segunda a domingo). */
