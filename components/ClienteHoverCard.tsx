@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/hover-card";
 import { StatusClienteBadge } from "@/components/StatusClienteBadge";
 import type { ClienteCRM, Consultora, Reuniao } from "@/lib/types";
-import { formatarData, formatarMoedaBR } from "@/lib/utils";
+import { formatarData, formatarMoedaBR, formatarNomeCliente } from "@/lib/utils";
 
 interface ClienteHoverCardProps {
   cliente: ClienteCRM;
@@ -46,7 +46,9 @@ export function ClienteHoverCard({
       <HoverCardContent>
         <div className="flex flex-col gap-2">
           <div>
-            <p className="font-heading text-sm font-medium">{cliente.nome_razao_social}</p>
+            <p className="font-heading text-sm font-medium">
+              {formatarNomeCliente(cliente.nome_razao_social, cliente.nome_fantasia)}
+            </p>
             <p className="text-xs text-muted-foreground">{cliente.cpf_cnpj_responsavel}</p>
           </div>
 

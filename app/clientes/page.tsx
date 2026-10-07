@@ -24,6 +24,7 @@ import { useBusca } from "@/lib/search-context";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { mockClientesCRM, mockConsultoras, mockContratos, mockReunioes } from "@/lib/mock-data";
 import type { ClienteCRM, Consultora, Contrato, Reuniao, StatusCliente } from "@/lib/types";
+import { mesmoCliente, normalizarNome } from "@/lib/nomes-cliente";
 import { estaNaSemanaAtual } from "@/lib/utils";
 import { calcularProximoMarco } from "@/lib/calcular-marcos";
 
@@ -137,7 +138,7 @@ export default function ClientesPage() {
   /** Últimas 3 reuniões do cliente (mais recente primeiro), casando por nome. */
   function ultimasReunioesDoCliente(cliente: ClienteCRM): Reuniao[] {
     return reunioes
-      .filter((r) => r.cliente_nome === cliente.nome_razao_social)
+      .filter((r) => mesmoCliente(r.cliente_nome, cliente.nome_razao_social))
       .sort((a, b) => b.data_reuniao.localeCompare(a.data_reuniao))
       .slice(0, 3);
   }
@@ -212,7 +213,7 @@ export default function ClientesPage() {
 
   // Sempre sobre o total de clientes (antes dos filtros), igual ao resumo da página "/".
   const resumo = React.useMemo(() => {
-    const nomesPermitidos = new Set(clientes.map((c) => c.nome_razao_social));
+    const nomesPermitidos = new Set(clientes.map((c) => normalizarNome(c.nome_razao_social)));
     const consultorasAtribuidas = new Set(
       contratos
         .filter((c) => clientes.some((cliente) => cliente.id === c.cliente_id))
@@ -220,7 +221,7 @@ export default function ClientesPage() {
         .filter((id): id is string => Boolean(id)),
     );
     const reunioesSemana = reunioes.filter(
-      (r) => nomesPermitidos.has(r.cliente_nome) && estaNaSemanaAtual(r.data_reuniao),
+      (r) => nomesPermitidos.has(normalizarNome(r.cliente_nome)) && estaNaSemanaAtual(r.data_reuniao),
     ).length;
 
     return clientes.reduce(

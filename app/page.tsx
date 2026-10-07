@@ -56,6 +56,7 @@ import {
   historicoDoCliente,
   type CamposReuniao,
 } from "@/lib/reunioes";
+import { useNomeExibicao } from "@/lib/nomes-cliente-context";
 import { useBusca } from "@/lib/search-context";
 import { fetchAutenticado } from "@/lib/fetch-autenticado";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
@@ -102,6 +103,7 @@ interface ModalState {
 
 export default function DashboardPage() {
   const { busca } = useBusca();
+  const nomeExibicao = useNomeExibicao();
   const [clientes, setClientes] = React.useState<Cliente[]>([]);
   const [consultoras, setConsultoras] = React.useState<Consultora[]>([]);
   const [reunioes, setReunioes] = React.useState<Reuniao[]>([]);
@@ -253,7 +255,7 @@ export default function DashboardPage() {
     return linhas.filter((linha) => {
       if (
         buscaNormalizada &&
-        !linha.cliente.cliente_nome.toLowerCase().includes(buscaNormalizada) &&
+        !nomeExibicao(linha.cliente.cliente_nome).toLowerCase().includes(buscaNormalizada) &&
         !nomeConsultora(linha.cliente.consultora_id).toLowerCase().includes(buscaNormalizada)
       ) {
         return false;
@@ -293,6 +295,7 @@ export default function DashboardPage() {
     linhas,
     reunioes,
     consultoras,
+    nomeExibicao,
     busca,
     filtroConsultora,
     filtroStatus,
@@ -680,7 +683,7 @@ export default function DashboardPage() {
                   return (
                     <TableRow key={linha.cliente.cliente_nome}>
                       <TableCell className="font-medium whitespace-nowrap">
-                        {linha.cliente.cliente_nome}
+                        {nomeExibicao(linha.cliente.cliente_nome)}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         {nomeConsultora(linha.cliente.consultora_id)}
@@ -862,7 +865,7 @@ export default function DashboardPage() {
                   linhasAgendamentosFiltradas.map((linha) => (
                     <TableRow key={linha.agendamento.id}>
                       <TableCell className="font-medium whitespace-nowrap">
-                        {linha.agendamento.cliente_nome}
+                        {nomeExibicao(linha.agendamento.cliente_nome)}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         {nomeConsultora(linha.agendamento.consultora_id ?? "")}

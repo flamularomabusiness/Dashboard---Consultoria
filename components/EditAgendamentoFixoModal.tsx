@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { CamposAgendamentoFixo } from "@/lib/agendamentos";
+import { useNomeExibicao } from "@/lib/nomes-cliente-context";
 import { mensagemDeErro } from "@/lib/reunioes";
 import type { AgendamentoFixo, Reuniao } from "@/lib/types";
 import {
@@ -87,6 +88,7 @@ function EditForm({
   onSalvar: EditAgendamentoFixoModalProps["onSalvar"];
   onFechar: () => void;
 }) {
+  const nomeExibicao = useNomeExibicao();
   const diaOriginal = DIAS_SEMANA_GRAVADOS[indiceDiaSemana(agendamento.dia_semana)];
   const horarioOriginal = agendamento.horario.slice(0, 5);
 
@@ -124,7 +126,7 @@ function EditForm({
     <form onSubmit={handleSubmit}>
       <DialogHeader>
         <DialogTitle>Editar Agendamento Fixo</DialogTitle>
-        <DialogDescription>{agendamento.cliente_nome}</DialogDescription>
+        <DialogDescription>{nomeExibicao(agendamento.cliente_nome)}</DialogDescription>
       </DialogHeader>
 
       <div className="grid gap-4 py-4">

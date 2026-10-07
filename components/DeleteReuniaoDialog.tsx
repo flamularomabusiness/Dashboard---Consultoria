@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useNomeExibicao } from "@/lib/nomes-cliente-context";
 import { mensagemDeErro } from "@/lib/reunioes";
 import type { Reuniao } from "@/lib/types";
 import { formatarData } from "@/lib/utils";
@@ -31,6 +32,7 @@ export function DeleteReuniaoDialog({
   onOpenChange,
   onConfirmar,
 }: DeleteReuniaoDialogProps) {
+  const nomeExibicao = useNomeExibicao();
   const [excluindo, setExcluindo] = React.useState(false);
 
   async function handleConfirmar() {
@@ -56,7 +58,7 @@ export function DeleteReuniaoDialog({
 
         {reuniao && (
           <p className="text-sm">
-            Reunião de <strong>{reuniao.cliente_nome}</strong> em{" "}
+            Reunião de <strong>{nomeExibicao(reuniao.cliente_nome)}</strong> em{" "}
             <strong>{formatarData(reuniao.data_reuniao)}</strong>.
           </p>
         )}

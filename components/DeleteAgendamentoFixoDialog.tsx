@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useNomeExibicao } from "@/lib/nomes-cliente-context";
 import { mensagemDeErro } from "@/lib/reunioes";
 import type { AgendamentoFixo } from "@/lib/types";
 
@@ -31,6 +32,7 @@ export function DeleteAgendamentoFixoDialog({
   onOpenChange,
   onConfirmar,
 }: DeleteAgendamentoFixoDialogProps) {
+  const nomeExibicao = useNomeExibicao();
   const [removendo, setRemovendo] = React.useState(false);
 
   async function handleConfirmar() {
@@ -59,7 +61,7 @@ export function DeleteAgendamentoFixoDialog({
         {agendamento && (
           <div className="flex flex-col gap-2 text-sm">
             <p>
-              <strong>{agendamento.cliente_nome}</strong> —{" "}
+              <strong>{nomeExibicao(agendamento.cliente_nome)}</strong> —{" "}
               <span className="capitalize">{agendamento.dia_semana}</span> às{" "}
               {agendamento.horario.slice(0, 5)}.
             </p>
