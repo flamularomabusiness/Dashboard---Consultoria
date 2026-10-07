@@ -110,6 +110,16 @@ export interface AgendamentoFixo {
   dia_semana: string;
   horario: string; // "HH:MM:SS"
   email_cliente: string | null;
+  /**
+   * false = removido no INSIGHT ("deletado"): a sincronização com a planilha não o
+   * recria e nenhuma reunião é gerada para ele. Ausente/true = ativo.
+   */
+  ativo?: boolean | null;
+  /**
+   * true = dia/horário editados no INSIGHT: a sincronização com a planilha não
+   * sobrescreve mais esses valores.
+   */
+  manual?: boolean | null;
 }
 
 /**

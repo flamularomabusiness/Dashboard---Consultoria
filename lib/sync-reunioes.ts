@@ -3,6 +3,7 @@
 // reuniões já nasce com a agenda da semana preenchida, sem precisar que
 // alguém agende manualmente cada compromisso fixo.
 import { addDays, format } from "date-fns";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import type { AgendamentoFixo, Reuniao } from "@/lib/types";
 import { proximaOcorrenciaDiaSemana } from "@/lib/utils";
@@ -18,14 +19,19 @@ export interface ResultadoSyncReunioes {
  * a próxima ocorrência do seu dia/horário. Idempotente: casa por
  * `cliente_nome` + `data_reuniao` contra `reunioesExistentes` (já carregadas
  * pelo chamador — evita buscar de novo o que o caller já tem em mãos) e só
- * insere o que ainda não existe.
+ * insere o que ainda não existe. Agendamentos removidos no INSIGHT
+ * (`ativo === false`) não geram reunião.
+ *
+ * `cliente` é o cliente Supabase a usar: o do navegador (padrão) ou, na rota de
+ * cron, um com a service key (não há usuário logado lá).
  */
 export async function syncAgendamentosFixosToReunioes(
   agendamentosFixos: AgendamentoFixo[],
   reunioesExistentes: Reuniao[],
   hoje: Date = new Date(),
+  cliente: SupabaseClient | null = supabase,
 ): Promise<ResultadoSyncReunioes> {
-  if (!supabase) return { success: true, inseridas: 0 };
+  if (!cliente) return { success: true, inseridas: 0 };
 
   try {
     const existentes = new Set(
@@ -39,6 +45,7 @@ export async function syncAgendamentosFixosToReunioes(
     const candidatas = new Map<string, Omit<Reuniao, "id" | "created_at">>();
     const hojeISO = format(hoje, "yyyy-MM-dd");
     for (const agendamento of agendamentosFixos) {
+      if (agendamento.ativo === false) continue;
       const ocorrencia = proximaOcorrenciaDiaSemana(agendamento.dia_semana, hoje);
       const dataReuniao = format(ocorrencia, "yyyy-MM-dd");
       const chave = `${agendamento.cliente_nome}|${dataReuniao}`;
@@ -74,7 +81,7 @@ export async function syncAgendamentosFixosToReunioes(
       return { success: true, inseridas: 0 };
     }
 
-    const { error } = await supabase.from("reunioes").insert(aInserir);
+    const { error } = await cliente.from("reunioes").insert(aInserir);
     if (error) throw error;
 
     return { success: true, inseridas: aInserir.length };

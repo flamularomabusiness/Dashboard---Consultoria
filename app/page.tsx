@@ -42,6 +42,14 @@ import { DeleteReuniaoDialog } from "@/components/DeleteReuniaoDialog";
 import { EditReuniaoModal } from "@/components/EditReuniaoModal";
 import { RemarcarReuniaoModal } from "@/components/RemarcarReuniaoModal";
 import { ReuniaoDetalhesModal } from "@/components/ReuniaoDetalhesModal";
+import { DeleteAgendamentoFixoDialog } from "@/components/DeleteAgendamentoFixoDialog";
+import { EditAgendamentoFixoModal } from "@/components/EditAgendamentoFixoModal";
+import {
+  atualizarAgendamentoFixo,
+  desativarAgendamentoFixo,
+  sincronizarAgendamentosComSheets,
+  type CamposAgendamentoFixo,
+} from "@/lib/agendamentos";
 import {
   atualizarReuniao,
   deletarReuniao,
@@ -73,10 +81,11 @@ import type {
 import {
   calcularStatsReunioes,
   calcularStatusReuniao,
+  dataLocalISO,
   diasDesde,
   estaNaSemanaAtual,
   formatarData,
-  planejarSincronizacaoAgendamentos,
+  obterSemanaAtual,
   proximaOcorrenciaDiaSemana,
   resolverConsultoraId,
   reuniaoEmFoco,
@@ -119,76 +128,12 @@ export default function DashboardPage() {
   const [edicaoId, setEdicaoId] = React.useState<string | null>(null);
   const [remarcarId, setRemarcarId] = React.useState<string | null>(null);
   const [exclusaoId, setExclusaoId] = React.useState<string | null>(null);
+  const [edicaoFixoId, setEdicaoFixoId] = React.useState<string | null>(null);
+  const [exclusaoFixoId, setExclusaoFixoId] = React.useState<string | null>(null);
+  const agendamentoFixoPorId = (id: string | null) =>
+    agendamentosFixos.find((a) => a.id === id) ?? null;
   const reuniaoPorId = (id: string | null) => reunioes.find((r) => r.id === id) ?? null;
   const reuniaoDetalhes = reuniaoPorId(detalhesId);
-
-  /**
-   * Compara os agendamentos fixos da planilha com os do Supabase e grava lá
-   * o que estiver faltando ou desatualizado. Só roda com Supabase configurado
-   * (sem ele não há onde persistir a sincronização) — o chamador também só
-   * invoca esta função quando `daSheet` veio mesmo da planilha real (nunca com
-   * fallback fictício), para nunca gravar dados de teste no Supabase.
-   * Retorna a lista final (já refletindo os inserts/updates) para atualizar o
-   * estado da tela.
-   */
-  async function sincronizarAgendamentosComSheets(
-    daSheet: AgendamentoFixoSheet[],
-    doSupabase: AgendamentoFixo[],
-    consultorasCarregadas: Consultora[],
-  ): Promise<AgendamentoFixo[]> {
-    if (!isSupabaseConfigured || !supabase) return doSupabase;
-
-    const plano = planejarSincronizacaoAgendamentos(daSheet, doSupabase);
-
-    for (const item of plano.paraInserir) {
-      const { error } = await supabase.from("agendamentos_fixos").insert({
-        cliente_nome: item.cliente_nome,
-        // A planilha traz o nome da consultora (ex. "Tainara Muller"), não o
-        // id — a coluna é uuid no Supabase, então precisa resolver antes.
-        consultora_id: resolverConsultoraId(item.consultora_id, consultorasCarregadas),
-        dia_semana: item.dia_semana,
-        horario: item.horario,
-      });
-      if (error) {
-        console.error(`[Sync agendamentos_fixos] Erro ao inserir "${item.cliente_nome}":`, error);
-      } else {
-        console.log(
-          `[Sync agendamentos_fixos] INSERT -> ${item.cliente_nome}: ${item.dia_semana} às ${item.horario}`,
-        );
-      }
-    }
-
-    for (const { atual, novo } of plano.paraAtualizar) {
-      const { error } = await supabase
-        .from("agendamentos_fixos")
-        .update({
-          dia_semana: novo.dia_semana,
-          horario: novo.horario,
-          consultora_id: resolverConsultoraId(novo.consultora_id, consultorasCarregadas),
-        })
-        .eq("id", atual.id);
-      if (error) {
-        console.error(`[Sync agendamentos_fixos] Erro ao atualizar "${atual.cliente_nome}":`, error);
-      } else {
-        console.log(
-          `[Sync agendamentos_fixos] UPDATE -> ${atual.cliente_nome}: ${atual.dia_semana} ${atual.horario} => ${novo.dia_semana} ${novo.horario}`,
-        );
-      }
-    }
-
-    for (const item of plano.semMudanca) {
-      console.log(`[Sync agendamentos_fixos] OK -> ${item.cliente_nome} já sincronizado`);
-    }
-
-    if (plano.paraInserir.length === 0 && plano.paraAtualizar.length === 0) {
-      return doSupabase;
-    }
-
-    const { data: agendamentosAtualizados } = await supabase
-      .from("agendamentos_fixos")
-      .select("*");
-    return agendamentosAtualizados ?? doSupabase;
-  }
 
   // Carrega clientes e agendamentos fixos (Google Sheets, com fallback fictício),
   // consultoras/reuniões (Supabase quando configurado, senão dados fictícios),
@@ -381,23 +326,35 @@ export default function DashboardPage() {
   // e verifica se já existe uma reunião registrada para essa data -> "Marcada".
   const linhasAgendamentosFixos = React.useMemo<LinhaAgendamentoFixo[]>(() => {
     const hoje = new Date();
-    return agendamentosFixos.map((agendamento) => {
-      const proximaOcorrencia = format(
-        proximaOcorrenciaDiaSemana(agendamento.dia_semana, hoje),
-        "yyyy-MM-dd",
-      );
-      const marcada = reunioes.some(
-        (r) =>
-          r.cliente_nome === agendamento.cliente_nome &&
-          r.data_reuniao === proximaOcorrencia,
-      );
-      return {
-        agendamento,
-        proximaOcorrencia,
-        statusSemana: marcada ? "marcada" : "faltando",
-      };
-    });
+    return agendamentosFixos
+      .filter((a) => a.ativo !== false)
+      .map((agendamento) => {
+        const proximaOcorrencia = format(
+          proximaOcorrenciaDiaSemana(agendamento.dia_semana, hoje),
+          "yyyy-MM-dd",
+        );
+        const marcada = reunioes.some(
+          (r) =>
+            r.cliente_nome === agendamento.cliente_nome &&
+            r.data_reuniao === proximaOcorrencia,
+        );
+        return {
+          agendamento,
+          proximaOcorrencia,
+          statusSemana: marcada ? "marcada" : "faltando",
+        };
+      });
   }, [agendamentosFixos, reunioes]);
+
+  /** Reuniões ainda por acontecer nesta semana (hoje até domingo) — as geradas pelos agendamentos fixos + manuais. */
+  const reunioesRestantesSemana = React.useMemo(() => {
+    const hoje = new Date();
+    const hojeISO = dataLocalISO(hoje);
+    const { fim } = obterSemanaAtual(hoje);
+    return reunioes.filter(
+      (r) => r.status === "agendada" && r.data_reuniao >= hojeISO && r.data_reuniao <= fim,
+    ).length;
+  }, [reunioes]);
 
   const linhasAgendamentosFiltradas = React.useMemo(() => {
     if (!apenasFaltando) return linhasAgendamentosFixos;
@@ -486,6 +443,51 @@ export default function DashboardPage() {
       finalizada_em: new Date().toISOString(),
     });
     toast.success("Reunião finalizada com sucesso.");
+  }
+
+  // --- Agendamentos fixos: editar / remover ---
+
+  /** Reunião "agendada" de hoje até 6 dias à frente do cliente — a do ciclo atual do horário fixo. */
+  function reuniaoDoCicloDe(agendamento: AgendamentoFixo | null): Reuniao | null {
+    if (!agendamento) return null;
+    const hoje = new Date();
+    const hojeISO = dataLocalISO(hoje);
+    const limiteISO = dataLocalISO(addDays(hoje, 6));
+    return (
+      reunioes
+        .filter(
+          (r) =>
+            r.cliente_nome === agendamento.cliente_nome &&
+            r.status === "agendada" &&
+            r.data_reuniao >= hojeISO &&
+            r.data_reuniao <= limiteISO,
+        )
+        .sort((a, b) => a.data_reuniao.localeCompare(b.data_reuniao))[0] ?? null
+    );
+  }
+
+  async function salvarAgendamentoFixo(
+    id: string,
+    campos: CamposAgendamentoFixo,
+    moverReuniaoDoCiclo: boolean,
+  ) {
+    const reuniaoDoCiclo = moverReuniaoDoCiclo ? reuniaoDoCicloDe(agendamentoFixoPorId(id)) : null;
+    const atualizado = await atualizarAgendamentoFixo(id, campos);
+    setAgendamentosFixos((atual) => atual.map((a) => (a.id === id ? atualizado : a)));
+
+    if (reuniaoDoCiclo && campos.dia_semana) {
+      const novaData = format(proximaOcorrenciaDiaSemana(campos.dia_semana), "yyyy-MM-dd");
+      await aplicarAtualizacao(reuniaoDoCiclo.id, { data_reuniao: novaData });
+    }
+    toast.success("Agendamento fixo atualizado");
+  }
+
+  async function removerAgendamentoFixo(agendamento: AgendamentoFixo) {
+    await desativarAgendamentoFixo(agendamento.id);
+    setAgendamentosFixos((atual) =>
+      atual.map((a) => (a.id === agendamento.id ? { ...a, ativo: false } : a)),
+    );
+    toast.success("Agendamento fixo removido");
   }
 
   // --- Controle do modal ---
@@ -804,7 +806,12 @@ export default function DashboardPage() {
         <div className="flex flex-col gap-1">
           <h2 className="text-lg font-bold text-heading">Agendamentos Fixos da Semana</h2>
           <p className="text-sm text-muted-foreground">
-            Próxima ocorrência de cada horário fixo e se já existe reunião marcada para ela.
+            Próxima ocorrência de cada horário fixo e se já existe reunião marcada para ela. As
+            reuniões são geradas automaticamente a partir da planilha.
+          </p>
+          <p className="text-sm font-medium">
+            Reuniões ainda por acontecer esta semana:{" "}
+            <span className="text-heading">{reunioesRestantesSemana}</span>
           </p>
         </div>
 
@@ -830,12 +837,13 @@ export default function DashboardPage() {
                   <TableHead>Horário</TableHead>
                   <TableHead>Próxima Reunião</TableHead>
                   <TableHead>Status da Semana</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {carregando && (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                       <Loader2 className="mr-2 inline size-4 animate-spin" />
                       Carregando dados...
                     </TableCell>
@@ -844,7 +852,7 @@ export default function DashboardPage() {
 
                 {!carregando && linhasAgendamentosFiltradas.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                       Nenhum agendamento fixo encontrado para o filtro selecionado.
                     </TableCell>
                   </TableRow>
@@ -884,6 +892,30 @@ export default function DashboardPage() {
                             🔴 Faltando
                           </Badge>
                         )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="icon-sm"
+                            variant="outline"
+                            className="rounded-full text-brand-blue dark:text-blue-400 transition-transform duration-200 hover:scale-105 hover:bg-brand-blue/10 hover:text-brand-blue"
+                            title="Editar agendamento fixo"
+                            aria-label={`Editar agendamento fixo de ${linha.agendamento.cliente_nome}`}
+                            onClick={() => setEdicaoFixoId(linha.agendamento.id)}
+                          >
+                            <Pencil className="size-4" />
+                          </Button>
+                          <Button
+                            size="icon-sm"
+                            variant="outline"
+                            className="rounded-full text-destructive transition-transform duration-200 hover:scale-105 hover:bg-destructive/10 hover:text-destructive"
+                            title="Remover agendamento fixo"
+                            aria-label={`Remover agendamento fixo de ${linha.agendamento.cliente_nome}`}
+                            onClick={() => setExclusaoFixoId(linha.agendamento.id)}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -931,6 +963,21 @@ export default function DashboardPage() {
         open={reuniaoPorId(remarcarId) !== null}
         onOpenChange={(open) => !open && setRemarcarId(null)}
         onRemarcar={remarcarReuniao}
+      />
+
+      <EditAgendamentoFixoModal
+        agendamento={agendamentoFixoPorId(edicaoFixoId)}
+        reuniaoDoCiclo={reuniaoDoCicloDe(agendamentoFixoPorId(edicaoFixoId))}
+        open={agendamentoFixoPorId(edicaoFixoId) !== null}
+        onOpenChange={(open) => !open && setEdicaoFixoId(null)}
+        onSalvar={salvarAgendamentoFixo}
+      />
+
+      <DeleteAgendamentoFixoDialog
+        agendamento={agendamentoFixoPorId(exclusaoFixoId)}
+        open={agendamentoFixoPorId(exclusaoFixoId) !== null}
+        onOpenChange={(open) => !open && setExclusaoFixoId(null)}
+        onConfirmar={removerAgendamentoFixo}
       />
 
       <DeleteReuniaoDialog

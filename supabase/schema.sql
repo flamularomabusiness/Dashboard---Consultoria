@@ -219,3 +219,15 @@ insert into consultoras (id, nome) values
   ('glaucia', 'Glaucia'),
   ('rosane', 'Rosane')
 on conflict (id) do nothing;
+
+-- ---------------------------------------------------------------------------
+-- Edição/remoção de agendamentos fixos pelo INSIGHT
+-- ---------------------------------------------------------------------------
+-- A planilha (Google Sheets) é a fonte da verdade e é sincronizada a cada carga
+-- do dashboard e pelo cron diário. Para o que for mudado no INSIGHT prevalecer:
+--   manual = true  -> dia/horário editados no INSIGHT; a planilha não sobrescreve.
+--   ativo  = false -> "deletado" no INSIGHT; a planilha não recria e nenhuma
+--                     reunião nova é gerada (as já existentes ficam).
+alter table agendamentos_fixos
+  add column if not exists ativo boolean not null default true,
+  add column if not exists manual boolean not null default false;

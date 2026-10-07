@@ -221,6 +221,17 @@ export function indiceDiaSemana(diaSemana: string): number {
   return indice === -1 ? 0 : indice;
 }
 
+/** Nome do dia como gravado em agendamentos_fixos (igual à planilha: "segunda-feira", "sábado"...). */
+export const DIAS_SEMANA_GRAVADOS = [
+  "domingo",
+  "segunda-feira",
+  "terça-feira",
+  "quarta-feira",
+  "quinta-feira",
+  "sexta-feira",
+  "sábado",
+] as const;
+
 /** Nome do dia da semana (em português) de uma data. */
 export function nomeDiaSemana(data: Date): (typeof DIAS_SEMANA)[number] {
   return DIAS_SEMANA[data.getDay()];
@@ -288,6 +299,13 @@ export function planejarSincronizacaoAgendamentos(
   for (const item of daSheet) {
     const horario = normalizarHorario(item.horario);
     const atual = doSupabase.find((a) => a.cliente_nome === item.cliente_nome);
+
+    // Removido ou editado no INSIGHT: a decisão feita aqui vale mais que a planilha
+    // (senão a próxima sincronização recriaria/desfaria a mudança).
+    if (atual && (atual.ativo === false || atual.manual === true)) {
+      semMudanca.push(item);
+      continue;
+    }
 
     if (!atual) {
       paraInserir.push({ ...item, horario });

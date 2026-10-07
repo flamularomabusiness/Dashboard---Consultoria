@@ -71,26 +71,36 @@ export async function fetchClientes(): Promise<Cliente[]> {
 }
 
 /**
- * Busca os agendamentos fixos (dia da semana + horário) direto da mesma planilha.
- * Diferente de `fetchClientes`, qualquer falha (planilha não configurada, rede,
- * CSV inválido) cai no fallback de dados fictícios em vez de propagar o erro —
- * a tela de agendamentos fixos nunca deve ficar vazia por uma falha do Sheets.
+ * Busca os agendamentos fixos (dia da semana + horário) da planilha, SEM fallback:
+ * qualquer falha (planilha não configurada, rede, CSV inválido) lança erro. Use
+ * esta quando o resultado vai ser GRAVADO no banco (sincronização/cron) — gravar
+ * os dados fictícios de mock-data.ts por causa de uma instabilidade do Sheets
+ * poluiria o Supabase com clientes de teste.
+ */
+export async function fetchAgendamentosFixosEstrito(): Promise<AgendamentoFixoSheet[]> {
+  const linhas = await buscarLinhasCsv();
+
+  return linhas
+    .filter(
+      (linha) =>
+        Boolean(linha.cliente_nome) && Boolean(linha.dia_semana) && Boolean(linha.horario),
+    )
+    .map((linha) => ({
+      cliente_nome: (linha.cliente_nome ?? "").trim(),
+      consultora_id: (linha.consultora_id ?? "").trim(),
+      dia_semana: (linha.dia_semana ?? "").trim(),
+      horario: (linha.horario ?? "").trim(),
+    }));
+}
+
+/**
+ * Versão só para EXIBIÇÃO: qualquer falha cai no fallback de dados fictícios em
+ * vez de propagar o erro — a tela de agendamentos fixos nunca deve ficar vazia
+ * por uma falha do Sheets. Nunca grave o resultado no banco (use a Estrita).
  */
 export async function fetchAgendamentosFixos(): Promise<AgendamentoFixoSheet[]> {
   try {
-    const linhas = await buscarLinhasCsv();
-
-    return linhas
-      .filter(
-        (linha) =>
-          Boolean(linha.cliente_nome) && Boolean(linha.dia_semana) && Boolean(linha.horario),
-      )
-      .map((linha) => ({
-        cliente_nome: (linha.cliente_nome ?? "").trim(),
-        consultora_id: (linha.consultora_id ?? "").trim(),
-        dia_semana: (linha.dia_semana ?? "").trim(),
-        horario: (linha.horario ?? "").trim(),
-      }));
+    return await fetchAgendamentosFixosEstrito();
   } catch (erro) {
     console.error(
       "Falha ao buscar agendamentos fixos da planilha, usando dados fictícios:",
