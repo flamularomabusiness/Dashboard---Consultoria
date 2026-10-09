@@ -26,15 +26,6 @@ export function formatarData(dataISO: string | null | undefined): string {
   return format(parseISO(dataISO), "dd/MM/yyyy", { locale: ptBR });
 }
 
-/** "Razão Social (FANTASIA)" quando há nome fantasia; senão só a razão social. */
-export function formatarNomeCliente(
-  razaoSocial: string,
-  nomeFantasia?: string | null,
-): string {
-  const fantasia = nomeFantasia?.trim();
-  return fantasia ? `${razaoSocial} (${fantasia})` : razaoSocial;
-}
-
 /** Formata um valor numérico como moeda BRL (ex.: "R$ 45.000,00"). Retorna "-" se nulo. */
 export function formatarMoedaBR(valor: number | null | undefined): string {
   if (valor === null || valor === undefined) return "-";

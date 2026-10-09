@@ -20,7 +20,6 @@ import {
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { mensagemDeErro } from "@/lib/reunioes";
-import { useNomeExibicao } from "@/lib/nomes-cliente-context";
 import type { Reuniao } from "@/lib/types";
 import { cn, formatarData } from "@/lib/utils";
 
@@ -62,7 +61,6 @@ function RemarcarForm({
   onRemarcar: (id: string, novaData: string) => Promise<void>;
   onFechar: () => void;
 }) {
-  const nomeExibicao = useNomeExibicao();
   const [data, setData] = React.useState<Date | undefined>(undefined);
   const [salvando, setSalvando] = React.useState(false);
 
@@ -88,7 +86,7 @@ function RemarcarForm({
       <DialogHeader>
         <DialogTitle>Remarcar Reunião</DialogTitle>
         <DialogDescription>
-          {nomeExibicao(reuniao.cliente_nome)} — atualmente em {formatarData(reuniao.data_reuniao)}.
+          {reuniao.cliente_nome} — atualmente em {formatarData(reuniao.data_reuniao)}.
         </DialogDescription>
       </DialogHeader>
 

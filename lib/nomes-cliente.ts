@@ -1,9 +1,9 @@
 // Casamento de nomes de cliente entre fontes diferentes.
 //
 // O mesmo cliente aparece com grafias diferentes: a planilha (e `reunioes.cliente_nome`)
-// usa um nome como "Auto Abastecedora Conrado", a plataforma tem a razão social
-// completa ("AUTO ABASTECEDORA CONRADO LTDA") e o nome fantasia ("POSTO AMIGAO").
-// Comparar com `===` falharia por maiúsculas, acentos, pontuação e "LTDA".
+// usa um nome como "Auto Abastecedora Conrado", enquanto a plataforma tem a razão
+// social completa ("AUTO ABASTECEDORA CONRADO LTDA"). Comparar com `===` falharia
+// por maiúsculas, acentos, pontuação e "LTDA".
 
 /** Sufixos societários ignorados ao comparar nomes. */
 const SUFIXOS_SOCIETARIOS = /(?:\s+(?:ltda|ltd|me|mei|epp|eireli|ss|sa|s a))+$/;
@@ -24,36 +24,4 @@ export function normalizarNome(nome: string | null | undefined): string {
 export function mesmoCliente(a: string | null | undefined, b: string | null | undefined): boolean {
   const na = normalizarNome(a);
   return na !== "" && na === normalizarNome(b);
-}
-
-export interface ClienteComFantasia {
-  nome_razao_social: string;
-  nome_fantasia: string | null;
-}
-
-/**
- * Índice razão social normalizada -> nome fantasia, para exibição. Ignora fantasia
- * vazia ou igual à razão social. Se duas linhas da plataforma têm a mesma razão
- * normalizada mas fantasias diferentes (ex.: filiais), fica sem fantasia — melhor
- * não mostrar nada do que mostrar a errada.
- */
-export function criarIndiceFantasia(clientes: ClienteComFantasia[]): Map<string, string | null> {
-  const indice = new Map<string, string | null>();
-  for (const c of clientes) {
-    const chave = normalizarNome(c.nome_razao_social);
-    if (!chave) continue;
-    const fantasia = c.nome_fantasia?.trim() || null;
-    const util = fantasia && normalizarNome(fantasia) !== chave ? fantasia : null;
-    if (!indice.has(chave)) indice.set(chave, util);
-    else if (indice.get(chave) !== util) indice.set(chave, null);
-  }
-  return indice;
-}
-
-/** Nome fantasia do cliente cujo nome (como vem da planilha/reuniões) é `nome`, ou null. */
-export function buscarFantasia(
-  nome: string,
-  indice: Map<string, string | null>,
-): string | null {
-  return indice.get(normalizarNome(nome)) ?? null;
 }

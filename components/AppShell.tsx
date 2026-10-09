@@ -10,7 +10,6 @@ import { InsightHeader } from "@/components/InsightHeader";
 import { InsightSidebar } from "@/components/InsightSidebar";
 import { LoginScreen } from "@/components/LoginScreen";
 import { useAuth } from "@/lib/auth-context";
-import { NomesClienteProvider } from "@/lib/nomes-cliente-context";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { estado } = useAuth();
@@ -30,9 +29,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <InsightSidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <InsightHeader />
-        <div className="flex flex-1 flex-col">
-          <NomesClienteProvider>{children}</NomesClienteProvider>
-        </div>
+        <div className="flex flex-1 flex-col">{children}</div>
       </div>
     </div>
   );

@@ -29,7 +29,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { useNomeExibicao } from "@/lib/nomes-cliente-context";
 import { mensagemDeErro } from "@/lib/reunioes";
 import type { Cliente } from "@/lib/types";
 
@@ -116,7 +115,6 @@ function ReuniaoModalForm({
   onFinalizar,
   onFechar,
 }: ReuniaoModalFormProps) {
-  const nomeExibicao = useNomeExibicao();
   const [cliente, setCliente] = React.useState(clienteSelecionado);
   const [data, setData] = React.useState<Date | undefined>(undefined);
   // Reaproveitado como resumo do Zoom (modo "ata") ou link do Drive (modo "finalizar").
@@ -168,7 +166,7 @@ function ReuniaoModalForm({
                 <SelectContent>
                   {clientes.map((c) => (
                     <SelectItem key={c.cliente_nome} value={c.cliente_nome}>
-                      {nomeExibicao(c.cliente_nome)}
+                      {c.cliente_nome}
                     </SelectItem>
                   ))}
                 </SelectContent>

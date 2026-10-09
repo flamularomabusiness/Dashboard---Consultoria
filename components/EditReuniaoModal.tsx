@@ -29,7 +29,6 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { mensagemDeErro, type CamposReuniao } from "@/lib/reunioes";
-import { useNomeExibicao } from "@/lib/nomes-cliente-context";
 import type { Cliente, Reuniao, StatusReuniao } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -80,7 +79,6 @@ interface EditReuniaoFormProps {
 }
 
 function EditReuniaoForm({ reuniao, clientes, onSalvar, onFechar }: EditReuniaoFormProps) {
-  const nomeExibicao = useNomeExibicao();
   const [clienteNome, setClienteNome] = React.useState(reuniao.cliente_nome);
   const [data, setData] = React.useState<Date | undefined>(parseISO(reuniao.data_reuniao));
   const [status, setStatus] = React.useState<StatusReuniao>(reuniao.status);
@@ -159,7 +157,7 @@ function EditReuniaoForm({ reuniao, clientes, onSalvar, onFechar }: EditReuniaoF
             <SelectContent>
               {nomesClientes.map((nome) => (
                 <SelectItem key={nome} value={nome}>
-                  {nomeExibicao(nome)}
+                  {nome}
                 </SelectItem>
               ))}
             </SelectContent>

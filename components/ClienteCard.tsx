@@ -12,7 +12,7 @@ import { Card, CardAction, CardContent, CardHeader } from "@/components/ui/card"
 import { ClienteHoverCard } from "@/components/ClienteHoverCard";
 import { StatusClienteBadge } from "@/components/StatusClienteBadge";
 import type { ClienteCRM, Consultora, Reuniao } from "@/lib/types";
-import { cn, formatarData, formatarNomeCliente } from "@/lib/utils";
+import { cn, formatarData } from "@/lib/utils";
 import { calcularProximoMarco, type CorMarco } from "@/lib/calcular-marcos";
 
 const CORES_MARCO: Record<CorMarco, string> = {
@@ -63,7 +63,7 @@ export function ClienteCard({
             ultimasReunioes={ultimasReunioes}
           >
             <span className="truncate text-base font-bold text-heading">
-              {formatarNomeCliente(cliente.nome_razao_social, cliente.nome_fantasia)}
+              {cliente.nome_razao_social}
             </span>
           </ClienteHoverCard>
           <p className="truncate font-mono text-[13px] text-muted-foreground">

@@ -14,7 +14,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/StatusBadge";
-import { useNomeExibicao } from "@/lib/nomes-cliente-context";
 import type { Reuniao } from "@/lib/types";
 import { calcularStatusReuniao, cn, diasDesde, formatarData } from "@/lib/utils";
 
@@ -49,7 +48,6 @@ export function ReuniaoDetalhesModal({
   onRemarcar,
   onDeletar,
 }: ReuniaoDetalhesModalProps) {
-  const nomeExibicao = useNomeExibicao();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
@@ -57,13 +55,13 @@ export function ReuniaoDetalhesModal({
           <>
             <DialogHeader>
               <DialogTitle>Detalhes da Reunião</DialogTitle>
-              <DialogDescription>{nomeExibicao(reuniao.cliente_nome)}</DialogDescription>
+              <DialogDescription>{reuniao.cliente_nome}</DialogDescription>
             </DialogHeader>
 
             <Secao titulo="Informações Básicas">
               <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5 text-sm">
                 <dt className="text-muted-foreground">Cliente</dt>
-                <dd>{nomeExibicao(reuniao.cliente_nome)}</dd>
+                <dd>{reuniao.cliente_nome}</dd>
                 <dt className="text-muted-foreground">Consultora</dt>
                 <dd>{consultoraNome || "-"}</dd>
                 <dt className="text-muted-foreground">Data</dt>
