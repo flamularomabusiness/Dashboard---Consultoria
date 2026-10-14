@@ -4,7 +4,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { Bell, CalendarClock, CheckCircle2, Loader2, UserCog, Users, X } from "lucide-react";
+import { Bell, CalendarClock, CheckCircle2, Loader2, UserCog, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { FilterPill } from "@/components/FilterPill";
@@ -15,11 +15,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { BuscaClientes } from "@/components/BuscaClientes";
 import { ClienteCard } from "@/components/ClienteCard";
 import { ClienteModal } from "@/components/ClienteModal";
 import { EditClienteModal } from "@/components/EditClienteModal";
 import { StatsCard } from "@/components/StatsCard";
 import { atualizarContratoInsight, type CamposContratoInsight } from "@/lib/contratos";
+import { clienteCombinaComBusca } from "@/lib/busca-clientes";
 import { useBusca } from "@/lib/search-context";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { mockClientesCRM, mockConsultoras, mockContratos, mockReunioes } from "@/lib/mock-data";
@@ -48,7 +50,7 @@ function filtrarClientesPermitidos(clientesTodos: ClienteCRM[], contratosTodos: 
 }
 
 export default function ClientesPage() {
-  const { busca } = useBusca();
+  const { busca, setBusca } = useBusca();
   const [clientes, setClientes] = React.useState<ClienteCRM[]>([]);
   const [consultoras, setConsultoras] = React.useState<Consultora[]>([]);
   const [reunioes, setReunioes] = React.useState<Reuniao[]>([]);
@@ -157,16 +159,8 @@ export default function ClientesPage() {
   }
 
   const clientesFiltrados = React.useMemo(() => {
-    const buscaNormalizada = busca.trim().toLowerCase();
     return clientes.filter((cliente) => {
-      if (
-        buscaNormalizada &&
-        !cliente.nome_razao_social.toLowerCase().includes(buscaNormalizada) &&
-        !(cliente.nome_fantasia ?? "").toLowerCase().includes(buscaNormalizada) &&
-        !cliente.cpf_cnpj_responsavel.toLowerCase().includes(buscaNormalizada)
-      ) {
-        return false;
-      }
+      if (!clienteCombinaComBusca(cliente, busca)) return false;
       if (filtroStatus !== "todos" && cliente.status !== filtroStatus) return false;
       if (filtroConsultora !== "todas") {
         const contrato = contratoDoCliente(cliente);
@@ -185,6 +179,7 @@ export default function ClientesPage() {
     setFiltroStatus("todos");
     setFiltroConsultora("todas");
     setApenasMarcoHoje(false);
+    setBusca("");
   }
 
   function abrirDetalhes(cliente: ClienteCRM) {
@@ -256,6 +251,13 @@ export default function ClientesPage() {
       {/* Filtros */}
       <section className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <BuscaClientes
+            valor={busca}
+            onChange={setBusca}
+            exibidos={clientesFiltrados.length}
+            total={clientes.length}
+          />
+
           <Select
             value={filtroStatus}
             onValueChange={(valor) => setFiltroStatus(valor as StatusCliente | "todos")}
@@ -304,8 +306,18 @@ export default function ClientesPage() {
       )}
 
       {!carregando && clientesFiltrados.length === 0 && (
-        <div className="py-10 text-center text-muted-foreground">
-          Nenhum cliente encontrado para os filtros selecionados.
+        <div className="flex flex-col items-center gap-3 py-10 text-center text-muted-foreground">
+          {busca.trim() ? (
+            <>
+              <p>Nenhum cliente encontrado para &lsquo;{busca.trim()}&rsquo;</p>
+              <Button variant="outline" size="sm" onClick={() => setBusca("")}>
+                <X className="mr-2 size-4" />
+                Limpar busca
+              </Button>
+            </>
+          ) : (
+            <p>Nenhum cliente encontrado para os filtros selecionados.</p>
+          )}
         </div>
       )}
 
@@ -323,11 +335,6 @@ export default function ClientesPage() {
           ))}
         </section>
       )}
-
-      <footer className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Users className="size-4" />
-        Total de clientes: {clientesFiltrados.length} de {clientes.length}
-      </footer>
 
       <ClienteModal
         cliente={clienteDetalhes}
