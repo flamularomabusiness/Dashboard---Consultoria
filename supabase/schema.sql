@@ -231,3 +231,24 @@ on conflict (id) do nothing;
 alter table agendamentos_fixos
   add column if not exists ativo boolean not null default true,
   add column if not exists manual boolean not null default false;
+
+-- ---------------------------------------------------------------------------
+-- Objetos do banco que o app USA (criados fora deste repositório — não rodar daqui)
+-- ---------------------------------------------------------------------------
+-- Views só de leitura (já filtram por permissão: admin vê tudo, consultora só o dela):
+--   dash_clientes  (id, nome_razao_social, nome_fantasia, cpf_cnpj_responsavel,
+--                   email_responsavel, status, ativo, data_inicio_contrato,
+--                   data_criacao, faturamento_medio -- só admin; null p/ consultora)
+--   dash_contratos (id, cliente_id, status, contexto_perfil_cliente, consultora_id,
+--                   conselheiro, produto_nome)
+-- O app NÃO lê as tabelas clientes/contratos/contrato_empresas/pagamentos_projetados.
+--
+-- RPCs: criar_agendamento_fixo(p_cliente_id, p_nome_zoom, p_consultora_id,
+--   p_dia_semana, p_horario, p_email) -> uuid; transferir_cliente(p_fixo_id, p_para)
+--   -> jsonb {reunioes, contratos}; consultora_atual() -> uuid; eh_admin_insight().
+--   Erros vêm em português em error.message.
+--
+-- agendamentos_fixos também tem: cliente_id (uuid, pode ser null) e
+-- inativado_por_plataforma. Um gatilho desativa o fixo e marca as reuniões futuras
+-- como 'cancelada' quando o cliente fica INATIVO na plataforma (e reativa ao voltar).
+-- reunioes.status passa a aceitar 'cancelada'.

@@ -18,9 +18,11 @@ export interface Cliente {
 
 /**
  * Estado bruto de uma reunião, como fica salvo no Supabase (tabela "reunioes").
- * Fluxo: agendada -> pendente_drive (ATA/resumo do Zoom recebido) -> finalizada
+ * Fluxo: agendada -> pendente_drive (ATA/resumo do Zoom recebido) -> finalizada.
+ * "cancelada" é posta pelo banco (gatilho) quando o cliente fica INATIVO na plataforma:
+ * não conta como realizada, pendente, atrasada nem "Marcada".
  */
-export type StatusReuniao = "agendada" | "pendente_drive" | "finalizada";
+export type StatusReuniao = "agendada" | "pendente_drive" | "finalizada" | "cancelada";
 
 // Nomes de coluna conferidos contra o schema real do Supabase do projeto
 // (não existe "link_ata": o recebimento da ATA é registrado via e-mail do
@@ -72,10 +74,14 @@ export interface ClienteCRM {
   cpf_cnpj_responsavel: string;
   email_responsavel: string;
   status: StatusCliente;
-  faturamento_medio: number | null;
+  /** Só vem preenchido para administrador (a view dash_clientes devolve null para consultora). */
+  faturamento_medio?: number | null;
+  /** false = cliente ocultado/desativado na plataforma (junto com status INATIVO, define "inativo"). */
+  ativo?: boolean | null;
   data_criacao: string; // timestamp ISO
   data_inicio_contrato: string | null; // data ISO (yyyy-MM-dd)
-  consultora_id: string | null;
+  /** Não vem da view dash_clientes (a consultora responsável está em Contrato.consultora_id). */
+  consultora_id?: string | null;
 }
 
 /**
@@ -110,6 +116,10 @@ export interface AgendamentoFixo {
   dia_semana: string;
   horario: string; // "HH:MM:SS"
   email_cliente: string | null;
+  /** Cliente da plataforma ao qual o fixo está vinculado (null = sem vínculo; não é inativado sozinho). */
+  cliente_id?: string | null;
+  /** true = o banco desativou o fixo porque o cliente ficou INATIVO na plataforma. */
+  inativado_por_plataforma?: boolean | null;
   /**
    * false = removido no INSIGHT ("deletado"): a sincronização com a planilha não o
    * recria e nenhuma reunião é gerada para ele. Ausente/true = ativo.
@@ -141,4 +151,18 @@ export interface LinhaAgendamentoFixo {
   agendamento: AgendamentoFixo;
   proximaOcorrencia: string; // data ISO (yyyy-MM-dd) da próxima ocorrência do dia fixo
   statusSemana: StatusSemana;
+}
+
+/**
+ * Cliente da plataforma como vem da view `dash_clientes` para o dashboard "/"
+ * (só o que a tela precisa para escolher cliente ao criar um agendamento fixo).
+ */
+export type ClientePlataforma = Pick<
+  ClienteCRM,
+  "id" | "nome_razao_social" | "nome_fantasia" | "cpf_cnpj_responsavel" | "status" | "ativo"
+>;
+
+/** Cliente inativo = status INATIVO ou ativo = false (ver view dash_clientes). */
+export function clienteEstaInativo(c: Pick<ClienteCRM, "status" | "ativo">): boolean {
+  return c.status === "INATIVO" || c.ativo === false;
 }

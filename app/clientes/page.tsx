@@ -7,6 +7,8 @@ import { toast } from "sonner";
 import { Bell, CalendarClock, CheckCircle2, Loader2, UserCog, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { FilterPill } from "@/components/FilterPill";
 import {
   Select,
@@ -24,8 +26,7 @@ import { atualizarContratoInsight, type CamposContratoInsight } from "@/lib/cont
 import { clienteCombinaComBusca } from "@/lib/busca-clientes";
 import { useBusca } from "@/lib/search-context";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
-import { mockClientesCRM, mockConsultoras, mockContratos, mockReunioes } from "@/lib/mock-data";
-import type { ClienteCRM, Consultora, Contrato, Reuniao, StatusCliente } from "@/lib/types";
+import { clienteEstaInativo, type ClienteCRM, type Consultora, type Contrato, type Reuniao, type StatusCliente } from "@/lib/types";
 import { mesmoCliente, normalizarNome } from "@/lib/nomes-cliente";
 import { estaNaSemanaAtual } from "@/lib/utils";
 import { calcularProximoMarco } from "@/lib/calcular-marcos";
@@ -35,10 +36,16 @@ import { calcularProximoMarco } from "@/lib/calcular-marcos";
 // da ROMA 35 etc.) não são consultoria e ficam de fora deste painel.
 const PRODUTOS_PERMITIDOS = ["CONSULTORIA FINANCEIRA", "CONSULTORIA GREEN+"];
 
+// Colunas das views do dashboard (nada de select *; faturamento_medio só vem preenchido para admin).
+const COLUNAS_DASH_CLIENTES =
+  "id,nome_razao_social,nome_fantasia,cpf_cnpj_responsavel,email_responsavel,status,ativo,data_inicio_contrato,data_criacao,faturamento_medio";
+const COLUNAS_DASH_CONTRATOS =
+  "id,cliente_id,status,contexto_perfil_cliente,consultora_id,conselheiro,produto_nome";
+
 /**
- * Clientes que devem aparecer no painel: contrato de um dos produtos permitidos
- * (ver PRODUTOS_PERMITIDOS) e status diferente de "INATIVO" — cliente inativo
- * não interessa aqui, só Ativo (e Inadimplente, pra acompanhar cobrança).
+ * Clientes que podem aparecer no painel: contrato de um dos produtos permitidos
+ * (ver PRODUTOS_PERMITIDOS). Os inativos (status INATIVO ou ativo = false) ficam
+ * escondidos por padrão na tela, com a opção "Mostrar inativos".
  */
 function filtrarClientesPermitidos(clientesTodos: ClienteCRM[], contratosTodos: Contrato[]) {
   const idsPermitidos = new Set(
@@ -46,7 +53,7 @@ function filtrarClientesPermitidos(clientesTodos: ClienteCRM[], contratosTodos: 
       .filter((c) => PRODUTOS_PERMITIDOS.includes(c.produtoNome ?? ""))
       .map((c) => c.cliente_id),
   );
-  return clientesTodos.filter((c) => idsPermitidos.has(c.id) && c.status !== "INATIVO");
+  return clientesTodos.filter((c) => idsPermitidos.has(c.id));
 }
 
 export default function ClientesPage() {
@@ -56,81 +63,101 @@ export default function ClientesPage() {
   const [reunioes, setReunioes] = React.useState<Reuniao[]>([]);
   const [contratos, setContratos] = React.useState<Contrato[]>([]);
   const [carregando, setCarregando] = React.useState(true);
+  const [erroCarga, setErroCarga] = React.useState<string | null>(null);
 
   const [filtroStatus, setFiltroStatus] = React.useState<StatusCliente | "todos">("todos");
   const [filtroConsultora, setFiltroConsultora] = React.useState("todas");
   const [apenasMarcoHoje, setApenasMarcoHoje] = React.useState(false);
+  const [mostrarInativos, setMostrarInativos] = React.useState(false);
 
   const [clienteDetalhes, setClienteDetalhes] = React.useState<ClienteCRM | null>(null);
   const [modalAberto, setModalAberto] = React.useState(false);
   const [edicaoClienteId, setEdicaoClienteId] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
-    async function carregarDados() {
+  /**
+   * Lê as views dash_clientes e dash_contratos (já filtradas por permissão no banco:
+   * admin vê tudo, consultora só os clientes e contratos dela) + consultoras e reuniões.
+   * Nunca as tabelas clientes/contratos. SEM fallback fictício: se alguma consulta
+   * falha, a tela diz qual e oferece "Tentar novamente".
+   */
+  const carregarDados = React.useCallback(async (silencioso = false) => {
+    if (!silencioso) {
       setCarregando(true);
-      try {
-        if (isSupabaseConfigured && supabase) {
-          const [
-            { data: clientesData, error: erroClientes },
-            { data: consultorasData, error: erroConsultoras },
-            { data: reunioesData, error: erroReunioes },
-            { data: contratosData, error: erroContratos },
-          ] = await Promise.all([
-            supabase
-              .from("clientes")
-              .select("*")
-              .neq("status", "INATIVO")
-              .order("data_criacao", { ascending: false }),
-            supabase.from("consultoras").select("*"),
-            supabase.from("reunioes").select("*"),
-            // "contratos"/"produtos" são da plataforma de mensalidades (mesmo Supabase),
-            // não deste app — é lá que mora `contexto_perfil_cliente`, não em "clientes".
-            // !inner + .in(produtos.nome) filtra só contratos de CONSULTORIA FINANCEIRA
-            // (ROMA 20) / CONSULTORIA GREEN+ (YMPULS 46) — os únicos produtos que devem
-            // aparecer neste painel de clientes.
-            supabase
-              .from("contratos")
-              .select(
-                "id,cliente_id,status,contexto_perfil_cliente,consultora_id,conselheiro,produtos!inner(nome)",
-              )
-              .in("produtos.nome", PRODUTOS_PERMITIDOS),
-          ]);
-          if (erroClientes || erroConsultoras || erroReunioes || erroContratos) {
-            throw erroClientes ?? erroConsultoras ?? erroReunioes ?? erroContratos;
-          }
-          const contratosPermitidos = (contratosData ?? []).map((c) => ({
-            id: c.id,
-            cliente_id: c.cliente_id,
-            status: c.status,
-            contexto_perfil_cliente: c.contexto_perfil_cliente,
-            consultora_id: c.consultora_id,
-            conselheiro: c.conselheiro ?? null,
-            produtoNome: (c.produtos as unknown as { nome: string } | null)?.nome ?? null,
-          }));
-          setClientes(filtrarClientesPermitidos(clientesData ?? [], contratosPermitidos));
-          setConsultoras(consultorasData ?? []);
-          setReunioes(reunioesData ?? []);
-          setContratos(contratosPermitidos);
-        } else {
-          setClientes(filtrarClientesPermitidos(mockClientesCRM, mockContratos));
-          setConsultoras(mockConsultoras);
-          setReunioes(mockReunioes);
-          setContratos(mockContratos);
-        }
-      } catch (erro) {
-        console.error("Erro ao carregar clientes:", erro);
-        toast.error("Não foi possível carregar os dados reais. Exibindo dados fictícios.");
-        setClientes(filtrarClientesPermitidos(mockClientesCRM, mockContratos));
-        setConsultoras(mockConsultoras);
-        setReunioes(mockReunioes);
-        setContratos(mockContratos);
-      } finally {
-        setCarregando(false);
-      }
+      setErroCarga(null);
     }
+    try {
+      if (!isSupabaseConfigured || !supabase) {
+        setErroCarga("Não foi possível carregar os dados: o Supabase não está configurado.");
+        return;
+      }
 
-    carregarDados();
+      const [rClientes, rConsultoras, rReunioes, rContratos] = await Promise.all([
+        supabase
+          .from("dash_clientes")
+          .select(COLUNAS_DASH_CLIENTES)
+          .order("data_criacao", { ascending: false }),
+        supabase.from("consultoras").select("*"),
+        supabase.from("reunioes").select("*"),
+        // dash_contratos já traz o nome do produto em `produto_nome` (sem embed).
+        // O filtro mantém só CONSULTORIA FINANCEIRA (ROMA 20) / CONSULTORIA GREEN+
+        // (YMPULS 46) — os únicos produtos que devem aparecer neste painel.
+        supabase
+          .from("dash_contratos")
+          .select(COLUNAS_DASH_CONTRATOS)
+          .in("produto_nome", PRODUTOS_PERMITIDOS),
+      ]);
+
+      // Cada consulta é conferida separada para dizer QUAL falhou (detalhe técnico só no console).
+      const falhas: string[] = [];
+      if (rClientes.error) {
+        console.error("Erro ao carregar clientes:", rClientes.error);
+        falhas.push("clientes");
+      }
+      if (rConsultoras.error) {
+        console.error("Erro ao carregar consultoras:", rConsultoras.error);
+        falhas.push("consultoras");
+      }
+      if (rReunioes.error) {
+        console.error("Erro ao carregar reuniões:", rReunioes.error);
+        falhas.push("reuniões");
+      }
+      if (rContratos.error) {
+        console.error("Erro ao carregar contratos:", rContratos.error);
+        falhas.push("contratos");
+      }
+      if (falhas.length > 0) {
+        setErroCarga(`Não foi possível carregar: ${falhas.join(", ")}.`);
+        return;
+      }
+      setErroCarga(null);
+
+      const contratosPermitidos: Contrato[] = (rContratos.data ?? []).map((c) => ({
+        id: c.id,
+        cliente_id: c.cliente_id,
+        status: c.status,
+        contexto_perfil_cliente: c.contexto_perfil_cliente,
+        consultora_id: c.consultora_id,
+        conselheiro: c.conselheiro ?? null,
+        produtoNome: c.produto_nome ?? null,
+      }));
+      setClientes(filtrarClientesPermitidos((rClientes.data ?? []) as ClienteCRM[], contratosPermitidos));
+      setConsultoras((rConsultoras.data ?? []) as Consultora[]);
+      setReunioes((rReunioes.data ?? []) as Reuniao[]);
+      setContratos(contratosPermitidos);
+    } catch (erro) {
+      console.error("Erro ao carregar clientes:", erro);
+      setErroCarga("Não foi possível carregar os dados.");
+    } finally {
+      setCarregando(false);
+    }
   }, []);
+
+  // Carga inicial (a tela já nasce em "carregando"). Adiada com setTimeout para o estado
+  // não ser atualizado de forma síncrona dentro do efeito.
+  React.useEffect(() => {
+    const id = setTimeout(() => void carregarDados(true), 0);
+    return () => clearTimeout(id);
+  }, [carregarDados]);
 
   function consultoraDoContrato(contrato: Contrato | null): Consultora | null {
     if (!contrato?.consultora_id) return null;
@@ -140,7 +167,8 @@ export default function ClientesPage() {
   /** Últimas 3 reuniões do cliente (mais recente primeiro), casando por nome. */
   function ultimasReunioesDoCliente(cliente: ClienteCRM): Reuniao[] {
     return reunioes
-      .filter((r) => mesmoCliente(r.cliente_nome, cliente.nome_razao_social))
+      // cancelada (cliente inativado) não é uma reunião que aconteceu
+      .filter((r) => r.status !== "cancelada" && mesmoCliente(r.cliente_nome, cliente.nome_razao_social))
       .sort((a, b) => b.data_reuniao.localeCompare(a.data_reuniao))
       .slice(0, 3);
   }
@@ -158,10 +186,22 @@ export default function ClientesPage() {
     );
   }
 
+  // Universo antes dos demais filtros: sem os inativos (padrão), a menos que "Mostrar inativos"
+  // esteja marcado ou o filtro de status seja INATIVO (aí só eles aparecem).
+  const universo = React.useMemo(
+    () =>
+      clientes.filter((c) =>
+        filtroStatus === "INATIVO" ? clienteEstaInativo(c) : mostrarInativos || !clienteEstaInativo(c),
+      ),
+    [clientes, filtroStatus, mostrarInativos],
+  );
+
   const clientesFiltrados = React.useMemo(() => {
-    return clientes.filter((cliente) => {
+    return universo.filter((cliente) => {
       if (!clienteCombinaComBusca(cliente, busca)) return false;
-      if (filtroStatus !== "todos" && cliente.status !== filtroStatus) return false;
+      if (filtroStatus !== "todos" && filtroStatus !== "INATIVO" && cliente.status !== filtroStatus) {
+        return false;
+      }
       if (filtroConsultora !== "todas") {
         const contrato = contratoDoCliente(cliente);
         if (contrato?.consultora_id !== filtroConsultora) return false;
@@ -173,12 +213,13 @@ export default function ClientesPage() {
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientes, contratos, busca, filtroStatus, filtroConsultora, apenasMarcoHoje]);
+  }, [universo, contratos, busca, filtroStatus, filtroConsultora, apenasMarcoHoje]);
 
   function limparFiltros() {
     setFiltroStatus("todos");
     setFiltroConsultora("todas");
     setApenasMarcoHoje(false);
+    setMostrarInativos(false);
     setBusca("");
   }
 
@@ -206,20 +247,24 @@ export default function ClientesPage() {
     toast.success("Dados do cliente atualizados");
   }
 
-  // Sempre sobre o total de clientes (antes dos filtros), igual ao resumo da página "/".
+  // Sempre sobre os clientes ativos (antes dos filtros), igual ao resumo da página "/".
   const resumo = React.useMemo(() => {
-    const nomesPermitidos = new Set(clientes.map((c) => normalizarNome(c.nome_razao_social)));
+    const clientesAtivos = clientes.filter((c) => !clienteEstaInativo(c));
+    const nomesPermitidos = new Set(clientesAtivos.map((c) => normalizarNome(c.nome_razao_social)));
     const consultorasAtribuidas = new Set(
       contratos
-        .filter((c) => clientes.some((cliente) => cliente.id === c.cliente_id))
+        .filter((c) => clientesAtivos.some((cliente) => cliente.id === c.cliente_id))
         .map((c) => c.consultora_id)
         .filter((id): id is string => Boolean(id)),
     );
     const reunioesSemana = reunioes.filter(
-      (r) => nomesPermitidos.has(normalizarNome(r.cliente_nome)) && estaNaSemanaAtual(r.data_reuniao),
+      (r) =>
+        r.status !== "cancelada" &&
+        nomesPermitidos.has(normalizarNome(r.cliente_nome)) &&
+        estaNaSemanaAtual(r.data_reuniao),
     ).length;
 
-    return clientes.reduce(
+    return clientesAtivos.reduce(
       (acc, cliente) => {
         if (cliente.status === "ATIVO") acc.ativos += 1;
         if (calcularProximoMarco(cliente.data_inicio_contrato).cor === "amarelo") {
@@ -230,6 +275,24 @@ export default function ClientesPage() {
       { ativos: 0, marcosHoje: 0, consultoras: consultorasAtribuidas.size, reunioesSemana },
     );
   }, [clientes, contratos, reunioes]);
+
+  if (erroCarga && !carregando) {
+    return (
+      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 p-4 sm:p-6 lg:p-8">
+        <header className="flex flex-col gap-1">
+          <h1 className="text-[28px] font-bold tracking-tight text-heading">Gestão de Clientes</h1>
+        </header>
+        <div
+          role="alert"
+          className="flex flex-col items-start gap-3 rounded-xl border border-destructive/40 p-6"
+        >
+          <p className="font-semibold text-destructive">Não foi possível carregar os dados</p>
+          <p className="text-sm text-muted-foreground">{erroCarga}</p>
+          <Button onClick={() => void carregarDados()}>Tentar novamente</Button>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 p-4 sm:p-6 lg:p-8">
@@ -255,7 +318,7 @@ export default function ClientesPage() {
             valor={busca}
             onChange={setBusca}
             exibidos={clientesFiltrados.length}
-            total={clientes.length}
+            total={universo.length}
           />
 
           <Select
@@ -269,6 +332,7 @@ export default function ClientesPage() {
               <SelectItem value="todos">Todos os status</SelectItem>
               <SelectItem value="ATIVO">Ativo</SelectItem>
               <SelectItem value="INADIMPLENTE">Inadimplente</SelectItem>
+              <SelectItem value="INATIVO">Inativo</SelectItem>
             </SelectContent>
           </Select>
 
@@ -289,6 +353,18 @@ export default function ClientesPage() {
           <FilterPill ativo={apenasMarcoHoje} onClick={() => setApenasMarcoHoje((v) => !v)}>
             Marcos hoje
           </FilterPill>
+
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="mostrar-inativos"
+              checked={mostrarInativos || filtroStatus === "INATIVO"}
+              disabled={filtroStatus === "INATIVO"}
+              onCheckedChange={(valor) => setMostrarInativos(valor === true)}
+            />
+            <Label htmlFor="mostrar-inativos" className="cursor-pointer font-normal">
+              Mostrar inativos
+            </Label>
+          </div>
         </div>
 
         <Button variant="outline" onClick={limparFiltros} className="w-full sm:w-auto">

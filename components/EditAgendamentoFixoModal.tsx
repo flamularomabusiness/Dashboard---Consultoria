@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { CamposAgendamentoFixo } from "@/lib/agendamentos";
+import { DIAS_UTEIS_GRAVADOS, type CamposAgendamentoFixo } from "@/lib/agendamentos";
 import { mensagemDeErro } from "@/lib/reunioes";
 import type { AgendamentoFixo, Reuniao } from "@/lib/types";
 import {
@@ -90,6 +90,10 @@ function EditForm({
   const diaOriginal = DIAS_SEMANA_GRAVADOS[indiceDiaSemana(agendamento.dia_semana)];
   const horarioOriginal = agendamento.horario.slice(0, 5);
 
+  // Segunda a sexta; se o fixo veio da planilha com sábado/domingo, mantém esse dia como opção.
+  const opcoesDia: string[] = DIAS_UTEIS_GRAVADOS.includes(diaOriginal as never)
+    ? [...DIAS_UTEIS_GRAVADOS]
+    : [...DIAS_UTEIS_GRAVADOS, diaOriginal];
   const [dia, setDia] = React.useState<string>(diaOriginal);
   const [horario, setHorario] = React.useState(horarioOriginal);
   const [email, setEmail] = React.useState(agendamento.email_cliente ?? "");
@@ -135,7 +139,7 @@ function EditForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {DIAS_SEMANA_GRAVADOS.map((d) => (
+              {opcoesDia.map((d) => (
                 <SelectItem key={d} value={d} className="capitalize">
                   {d}
                 </SelectItem>

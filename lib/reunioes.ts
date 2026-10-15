@@ -50,7 +50,8 @@ export function historicoDoCliente(
   limite = 3,
 ): Reuniao[] {
   return reunioes
-    .filter((r) => r.cliente_nome === clienteNome)
+    // cancelada (cliente inativado) não é uma reunião que aconteceu: fora do histórico.
+    .filter((r) => r.cliente_nome === clienteNome && r.status !== "cancelada")
     .sort((a, b) => b.data_reuniao.localeCompare(a.data_reuniao))
     .slice(0, limite);
 }

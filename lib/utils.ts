@@ -53,7 +53,7 @@ export function dataLocalISO(hoje: Date = new Date()): string {
 /**
  * ÚNICA fonte da verdade do status exibido de uma reunião (tabela, modal,
  * filtros e contadores devem usar só esta função):
- * - finalizada / pendente_drive (no banco) -> iguais
+ * - finalizada / pendente_drive / cancelada (no banco) -> iguais (cancelada nunca vira "atrasado")
  * - agendada e data >= hoje -> "agendada" (inclui hoje)
  * - agendada e data < hoje -> "atrasado" (calculado, não é gravado no banco)
  * Compara datas como strings "yyyy-MM-dd" (sem horas, sem fuso).
@@ -62,6 +62,7 @@ export function calcularStatusReuniao(
   reuniao: Pick<Reuniao, "status" | "data_reuniao">,
   hoje: Date = new Date(),
 ): StatusReuniaoCalculado {
+  if (reuniao.status === "cancelada") return "cancelada";
   if (reuniao.status === "finalizada") return "finalizada";
   if (reuniao.status === "pendente_drive") return "pendente_drive";
   return reuniao.data_reuniao.slice(0, 10) < dataLocalISO(hoje) ? "atrasado" : "agendada";
@@ -103,6 +104,8 @@ export function calcularStatsReunioes(
   let atrasadas = 0;
 
   for (const r of reunioes) {
+    // Cancelada não é agendada, realizada, pendente nem atrasada: fica fora de tudo.
+    if (r.status === "cancelada") continue;
     const status = calcularStatusReuniao(r, hoje);
     const data = r.data_reuniao.slice(0, 10);
     if (data >= inicio && data <= fim) {
@@ -136,6 +139,8 @@ export function separarUltimaEProximaReuniao(
   reunioesDoCliente: Reuniao[],
   hoje: Date = new Date(),
 ): { ultimaReuniao: Reuniao | null; proximaReuniao: Reuniao | null } {
+  // Reunião cancelada não é "última reunião" nem "próxima": é como se não existisse.
+  reunioesDoCliente = reunioesDoCliente.filter((r) => r.status !== "cancelada");
   const realizadas = reunioesDoCliente
     .filter((r) => reuniaoJaOcorreu(r, hoje))
     .sort((a, b) => b.data_reuniao.localeCompare(a.data_reuniao));
@@ -289,13 +294,17 @@ export type ReuniaoGerada = Omit<Reuniao, "id" | "created_at">;
  *    Sem isso, no dia da reunião a coluna "Próxima Reunião" ficaria vazia até o dia
  *    seguinte. Não cria se o cliente já tem alguma "agendada" depois de hoje
  *    (inclui reunião remarcada para amanhã).
- * Deduplica entre agendamentos repetidos do mesmo cliente.
+ * Deduplica entre agendamentos repetidos do mesmo cliente. Reuniões "cancelada" são ignoradas.
  */
 export function planejarReunioesAutomaticas(
   agendamentosFixos: AgendamentoFixo[],
   reunioesExistentes: Reuniao[],
   hoje: Date = new Date(),
 ): ReuniaoGerada[] {
+  // Reunião cancelada não conta para nada: nem "já existe nesta data", nem "ciclo coberto",
+  // nem "já tem futura". Assim, ao reativar um fixo, a próxima ocorrência é recriada
+  // mesmo havendo uma cancelada na mesma data.
+  reunioesExistentes = reunioesExistentes.filter((r) => r.status !== "cancelada");
   const existentes = new Set(reunioesExistentes.map((r) => `${r.cliente_nome}|${r.data_reuniao}`));
   const candidatas = new Map<string, ReuniaoGerada>();
   const hojeISO = dataLocalISO(hoje);
@@ -322,7 +331,8 @@ export function planejarReunioesAutomaticas(
     );
 
   for (const agendamento of agendamentosFixos) {
-    if (agendamento.ativo === false) continue;
+    // Só fixos ativos geram reunião (ativo=false cobre removido no INSIGHT e inativado pela plataforma).
+    if (agendamento.ativo === false || agendamento.inativado_por_plataforma === true) continue;
 
     const ocorrencia = proximaOcorrenciaDiaSemana(agendamento.dia_semana, hoje);
     const dataReuniao = format(ocorrencia, "yyyy-MM-dd");

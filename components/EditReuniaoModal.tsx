@@ -193,7 +193,10 @@ function EditReuniaoForm({ reuniao, clientes, onSalvar, onFechar }: EditReuniaoF
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {STATUS_OPCOES.map((opcao) => (
+              {(reuniao.status === "cancelada"
+                ? [...STATUS_OPCOES, { valor: "cancelada" as StatusReuniao, label: "Cancelada" }]
+                : STATUS_OPCOES
+              ).map((opcao) => (
                 <SelectItem key={opcao.valor} value={opcao.valor}>
                   {opcao.label}
                 </SelectItem>

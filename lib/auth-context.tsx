@@ -14,6 +14,8 @@ export interface PerfilInsight {
   nome: string | null;
   role: string;
   email: string | null;
+  /** Id da consultora vinculada ao usuário (RPC consultora_atual); null se não houver (ex.: admin sem consultora). */
+  consultoraId: string | null;
 }
 
 export type EstadoAuth =
@@ -42,7 +44,16 @@ async function resolverEstado(session: Session | null): Promise<EstadoAuth> {
   }
   const perfil = Array.isArray(data) ? data[0] : data;
   if (!perfil) return { status: "sem_acesso", email: session.user.email ?? null };
-  return { status: "autorizado", perfil: perfil as PerfilInsight };
+
+  // Vínculo usuário -> consultora. Falha aqui não tira o acesso: só deixa a pessoa
+  // sem as ações restritas ao "dono" (o banco valida tudo de novo de qualquer jeito).
+  const { data: consultoraId, error: erroConsultora } = await supabase.rpc("consultora_atual");
+  if (erroConsultora) console.error("Erro ao identificar a consultora do usuário:", erroConsultora.message);
+
+  return {
+    status: "autorizado",
+    perfil: { ...(perfil as Omit<PerfilInsight, "consultoraId">), consultoraId: (consultoraId as string | null) ?? null },
+  };
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -54,7 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setEstado({
         status: "autorizado",
-        perfil: { nome: "Desenvolvimento", role: "administrator", email: null },
+        perfil: { nome: "Desenvolvimento", role: "administrator", email: null, consultoraId: null },
       });
       return;
     }
@@ -92,6 +103,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const valor = React.useMemo(() => ({ estado, entrar, sair }), [estado, entrar, sair]);
   return <AuthContext.Provider value={valor}>{children}</AuthContext.Provider>;
+}
+
+/** Identidade para decidir o que mostrar na interface (o banco valida de verdade). */
+export function useIdentidade(): { ehAdmin: boolean; consultoraId: string | null } {
+  const { estado } = useAuth();
+  if (estado.status !== "autorizado") return { ehAdmin: false, consultoraId: null };
+  return {
+    ehAdmin: estado.perfil.role === "administrator",
+    consultoraId: estado.perfil.consultoraId,
+  };
 }
 
 export function useAuth(): AuthContextValue {

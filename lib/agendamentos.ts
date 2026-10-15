@@ -117,6 +117,90 @@ export async function desativarAgendamentoFixo(id: string): Promise<void> {
   }
 }
 
+/** Dias aceitos num fixo, no formato EXATO que a RPC e a planilha usam (com cedilha). */
+export const DIAS_UTEIS_GRAVADOS = [
+  "segunda-feira",
+  "terça-feira",
+  "quarta-feira",
+  "quinta-feira",
+  "sexta-feira",
+] as const;
+
+/**
+ * As RPCs devolvem a mensagem de erro já em português em `error.message` — é ela
+ * que o usuário vê (não adianta repassar PostgrestError cru).
+ */
+function lancarErroRpc(error: { message?: string } | null): never {
+  throw new Error(error?.message || "Não foi possível concluir a operação.");
+}
+
+export interface NovoAgendamentoFixoParams {
+  clienteId: string;
+  /** Nome como o Zoom escreve (vira `cliente_nome` do fixo e das reuniões geradas). */
+  nomeZoom: string;
+  consultoraId: string;
+  diaSemana: (typeof DIAS_UTEIS_GRAVADOS)[number];
+  /** "HH:MM" ou "HH:MM:SS". */
+  horario: string;
+  email?: string | null;
+}
+
+/** RPC `criar_agendamento_fixo`: o banco valida a permissão (consultora só cria para si). Devolve o id criado. */
+export async function criarAgendamentoFixo(params: NovoAgendamentoFixoParams): Promise<string> {
+  const { data, error } = await clienteDoNavegador().rpc("criar_agendamento_fixo", {
+    p_cliente_id: params.clienteId,
+    p_nome_zoom: params.nomeZoom.trim(),
+    p_consultora_id: params.consultoraId,
+    p_dia_semana: params.diaSemana,
+    p_horario: params.horario.length === 5 ? `${params.horario}:00` : params.horario,
+    p_email: params.email?.trim() || null,
+  });
+  if (error) lancarErroRpc(error);
+  return data as string;
+}
+
+export interface ResultadoTransferencia {
+  reunioes: number;
+  contratos: number;
+}
+
+/** RPC `transferir_cliente`: move o fixo, as reuniões futuras sem ATA e os contratos para outra consultora. */
+export async function transferirCliente(
+  fixoId: string,
+  paraConsultoraId: string,
+): Promise<ResultadoTransferencia> {
+  const { data, error } = await clienteDoNavegador().rpc("transferir_cliente", {
+    p_fixo_id: fixoId,
+    p_para: paraConsultoraId,
+  });
+  if (error) lancarErroRpc(error);
+  const resultado = (data ?? {}) as Partial<ResultadoTransferencia>;
+  return { reunioes: Number(resultado.reunioes ?? 0), contratos: Number(resultado.contratos ?? 0) };
+}
+
+/**
+ * Reativa um fixo desativado (só admin): ativo=true, manual=true (a planilha não o
+ * sobrescreve) e inativado_por_plataforma=false. 23505 = já existe outro fixo ativo
+ * para o mesmo cliente (índice único no banco).
+ */
+export async function reativarAgendamentoFixo(id: string): Promise<AgendamentoFixo> {
+  const { data, error } = await clienteDoNavegador()
+    .from("agendamentos_fixos")
+    .update({ ativo: true, manual: true, inativado_por_plataforma: false })
+    .eq("id", id)
+    .select();
+  if (error) {
+    if (error.code === "23505") {
+      throw new Error("Já existe um agendamento fixo ativo para este cliente.");
+    }
+    throw error;
+  }
+  if (!data || data.length === 0) {
+    throw new Error("Nenhuma linha atualizada (o agendamento não existe mais ou falta permissão).");
+  }
+  return data[0] as AgendamentoFixo;
+}
+
 /**
  * "Agora" no horário de São Paulo, mesmo rodando num servidor em UTC (cron da
  * Vercel). Usa o relógio de parede de lá como se fosse local, o que é o que

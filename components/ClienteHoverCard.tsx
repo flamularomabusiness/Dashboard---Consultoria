@@ -59,8 +59,12 @@ export function ClienteHoverCard({
               <StatusClienteBadge status={cliente.status} />
             </dd>
 
-            <dt className="text-muted-foreground">Plano:</dt>
-            <dd>{formatarMoedaBR(cliente.faturamento_medio)}</dd>
+            {cliente.faturamento_medio != null && (
+              <>
+                <dt className="text-muted-foreground">Plano:</dt>
+                <dd>{formatarMoedaBR(cliente.faturamento_medio)}</dd>
+              </>
+            )}
 
             <dt className="text-muted-foreground">Início:</dt>
             <dd>{formatarData(cliente.data_inicio_contrato)}</dd>

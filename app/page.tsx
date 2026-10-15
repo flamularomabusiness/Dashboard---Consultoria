@@ -11,8 +11,11 @@ import {
   FolderOpen,
   Loader2,
   Pencil,
+  Plus,
   Trash2,
   TrendingUp,
+  Unlink,
+  Users,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -44,12 +47,20 @@ import { RemarcarReuniaoModal } from "@/components/RemarcarReuniaoModal";
 import { ReuniaoDetalhesModal } from "@/components/ReuniaoDetalhesModal";
 import { DeleteAgendamentoFixoDialog } from "@/components/DeleteAgendamentoFixoDialog";
 import { EditAgendamentoFixoModal } from "@/components/EditAgendamentoFixoModal";
+import { FixosInativosSection } from "@/components/FixosInativosSection";
+import { NovoAgendamentoFixoModal } from "@/components/NovoAgendamentoFixoModal";
+import { TransferirFixoModal } from "@/components/TransferirFixoModal";
 import {
   atualizarAgendamentoFixo,
+  criarAgendamentoFixo,
   desativarAgendamentoFixo,
+  reativarAgendamentoFixo,
   sincronizarAgendamentosComSheets,
+  transferirCliente,
   type CamposAgendamentoFixo,
+  type NovoAgendamentoFixoParams,
 } from "@/lib/agendamentos";
+import { useIdentidade } from "@/lib/auth-context";
 import {
   atualizarReuniao,
   deletarReuniao,
@@ -60,17 +71,11 @@ import { useBusca } from "@/lib/search-context";
 import { fetchAutenticado } from "@/lib/fetch-autenticado";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { syncAgendamentosFixosToReunioes } from "@/lib/sync-reunioes";
-import {
-  mockAgendamentosFixos,
-  mockAgendamentosFixosSheet,
-  mockClientes,
-  mockConsultoras,
-  mockReunioes,
-} from "@/lib/mock-data";
 import type {
   AgendamentoFixo,
   AgendamentoFixoSheet,
   Cliente,
+  ClientePlataforma,
   Consultora,
   LinhaAgendamentoFixo,
   LinhaCliente,
@@ -78,6 +83,7 @@ import type {
   StatusReuniao,
   StatusReuniaoCalculado,
 } from "@/lib/types";
+import { clienteEstaInativo } from "@/lib/types";
 import {
   calcularStatsReunioes,
   calcularStatusReuniao,
@@ -93,6 +99,9 @@ import {
 } from "@/lib/utils";
 import { addDays, format, isBefore, parseISO, startOfDay } from "date-fns";
 
+// Colunas que o dashboard precisa da view dash_clientes (só para escolher cliente ao criar um fixo).
+const COLUNAS_DASH_CLIENTES = "id,nome_razao_social,nome_fantasia,cpf_cnpj_responsavel,status,ativo";
+
 interface ModalState {
   open: boolean;
   mode: ReuniaoModalMode;
@@ -102,11 +111,16 @@ interface ModalState {
 
 export default function DashboardPage() {
   const { busca } = useBusca();
+  const { ehAdmin, consultoraId: minhaConsultoraId } = useIdentidade();
   const [clientes, setClientes] = React.useState<Cliente[]>([]);
   const [consultoras, setConsultoras] = React.useState<Consultora[]>([]);
   const [reunioes, setReunioes] = React.useState<Reuniao[]>([]);
   const [agendamentosFixos, setAgendamentosFixos] = React.useState<AgendamentoFixo[]>([]);
   const [carregando, setCarregando] = React.useState(true);
+  /** Mensagem quando algo essencial não carregou (a tela mostra o erro, nunca dados de teste). */
+  const [erroCarga, setErroCarga] = React.useState<string | null>(null);
+  const [clientesPlataforma, setClientesPlataforma] = React.useState<ClientePlataforma[]>([]);
+  const [plataformaIndisponivel, setPlataformaIndisponivel] = React.useState(false);
 
   const [filtroConsultora, setFiltroConsultora] = React.useState("todas");
   const [filtroStatus, setFiltroStatus] = React.useState<StatusReuniaoCalculado | "todos">("todos");
@@ -130,105 +144,154 @@ export default function DashboardPage() {
   const [exclusaoId, setExclusaoId] = React.useState<string | null>(null);
   const [edicaoFixoId, setEdicaoFixoId] = React.useState<string | null>(null);
   const [exclusaoFixoId, setExclusaoFixoId] = React.useState<string | null>(null);
+  const [transferirFixoId, setTransferirFixoId] = React.useState<string | null>(null);
+  const [novoFixoAberto, setNovoFixoAberto] = React.useState(false);
   const agendamentoFixoPorId = (id: string | null) =>
     agendamentosFixos.find((a) => a.id === id) ?? null;
   const reuniaoPorId = (id: string | null) => reunioes.find((r) => r.id === id) ?? null;
   const reuniaoDetalhes = reuniaoPorId(detalhesId);
 
-  // Carrega clientes e agendamentos fixos (Google Sheets, com fallback fictício),
-  // consultoras/reuniões (Supabase quando configurado, senão dados fictícios),
-  // sincroniza os agendamentos fixos da planilha para dentro do Supabase e, a
-  // partir deles, gera as reuniões da semana que ainda não existem.
-  React.useEffect(() => {
-    async function carregarDados() {
+  /**
+   * Carrega clientes e fixos da planilha (Google Sheets, via rotas do servidor), e
+   * consultoras / reuniões / agendamentos fixos / clientes da plataforma (Supabase).
+   * Sincroniza os fixos da planilha e gera as reuniões que ainda não existem.
+   *
+   * SEM fallback fictício: se algo essencial falha, a tela mostra qual parte falhou
+   * (com "Tentar novamente") em vez de se encher de clientes de teste. Os clientes da
+   * plataforma (view dash_clientes) só servem para criar/reativar fixos, então a falha
+   * deles é parcial e não derruba o resto.
+   * `silencioso` recarrega sem trocar a tela por "Carregando..." (após criar/transferir).
+   */
+  const carregarDados = React.useCallback(async (silencioso = false) => {
+    if (!silencioso) {
       setCarregando(true);
-      try {
-        const [respostaClientes, respostaAgendamentosSheet] = await Promise.all([
-          fetchAutenticado("/api/clientes"),
-          fetchAutenticado("/api/agendamentos-fixos"),
+      setErroCarga(null);
+    }
+    try {
+      if (!isSupabaseConfigured || !supabase) {
+        setErroCarga("Não foi possível carregar os dados: o Supabase não está configurado.");
+        return;
+      }
+
+      const [respostaClientes, respostaFixosSheet, rConsultoras, rReunioes, rFixos, rPlataforma] =
+        await Promise.all([
+          fetchAutenticado("/api/clientes").catch(() => null),
+          fetchAutenticado("/api/agendamentos-fixos").catch(() => null),
+          supabase.from("consultoras").select("*"),
+          supabase.from("reunioes").select("*"),
+          supabase.from("agendamentos_fixos").select("*"),
+          supabase.from("dash_clientes").select(COLUNAS_DASH_CLIENTES),
         ]);
 
-        const clientesDaSheet: Cliente[] = respostaClientes.ok
-          ? await respostaClientes.json()
-          : mockClientes;
-
-        const agendamentosSheetPayload: { configurado: boolean; agendamentos: AgendamentoFixoSheet[] } =
-          respostaAgendamentosSheet.ok
-            ? await respostaAgendamentosSheet.json()
-            : { configurado: false, agendamentos: mockAgendamentosFixosSheet };
-
-        if (isSupabaseConfigured && supabase) {
-          const [
-            { data: consultorasData, error: erroConsultoras },
-            { data: reunioesData, error: erroReunioes },
-            { data: agendamentosData, error: erroAgendamentos },
-          ] = await Promise.all([
-            supabase.from("consultoras").select("*"),
-            supabase.from("reunioes").select("*"),
-            supabase.from("agendamentos_fixos").select("*"),
-          ]);
-          if (erroConsultoras || erroReunioes || erroAgendamentos) {
-            throw erroConsultoras ?? erroReunioes ?? erroAgendamentos;
-          }
-          const consultorasCarregadas = consultorasData ?? [];
-          setConsultoras(consultorasCarregadas);
-          // A planilha traz o nome da consultora, não o id (ver comentário em
-          // sincronizarAgendamentosComSheets) — resolve aqui também pra
-          // filtro/exibição por consultora funcionarem para esses clientes.
-          setClientes(
-            clientesDaSheet.map((c) => ({
-              ...c,
-              consultora_id:
-                resolverConsultoraId(c.consultora_id, consultorasCarregadas) ?? c.consultora_id,
-            })),
-          );
-
-          // Só sincroniza (grava no Supabase) quando a planilha real está
-          // configurada — nunca com o fallback fictício de mock-data.ts.
-          const agendamentosSincronizados = agendamentosSheetPayload.configurado
-            ? await sincronizarAgendamentosComSheets(
-                agendamentosSheetPayload.agendamentos,
-                agendamentosData ?? [],
-                consultorasCarregadas,
-              )
-            : (agendamentosData ?? []);
-          setAgendamentosFixos(agendamentosSincronizados);
-
-          setReunioes(reunioesData ?? []);
-          const resultadoSync = await syncAgendamentosFixosToReunioes(
-            agendamentosSincronizados,
-            reunioesData ?? [],
-          );
-          if (resultadoSync.inseridas > 0) {
-            const { data: reunioesAtualizadas } = await supabase.from("reunioes").select("*");
-            setReunioes(reunioesAtualizadas ?? reunioesData ?? []);
-          }
-        } else {
-          setClientes(clientesDaSheet);
-          setConsultoras(mockConsultoras);
-          setReunioes(mockReunioes);
-          setAgendamentosFixos(mockAgendamentosFixos);
+      // Cada consulta é conferida separada para dizer QUAL falhou (detalhe técnico só no console).
+      const falhas: string[] = [];
+      let clientesDaSheet: Cliente[] = [];
+      try {
+        if (!respostaClientes?.ok) {
+          throw new Error(`status ${respostaClientes?.status ?? "sem resposta"}`);
         }
+        clientesDaSheet = await respostaClientes.json();
       } catch (erro) {
-        console.error("Erro ao carregar dados:", erro);
-        toast.error("Não foi possível carregar os dados reais. Exibindo dados fictícios.");
-        setClientes(mockClientes);
-        setConsultoras(mockConsultoras);
-        setReunioes(mockReunioes);
-        setAgendamentosFixos(mockAgendamentosFixos);
-      } finally {
-        setCarregando(false);
+        console.error("Erro ao carregar clientes (planilha):", erro);
+        falhas.push("clientes (planilha)");
       }
-    }
+      if (rConsultoras.error) {
+        console.error("Erro ao carregar consultoras:", rConsultoras.error);
+        falhas.push("consultoras");
+      }
+      if (rReunioes.error) {
+        console.error("Erro ao carregar reuniões:", rReunioes.error);
+        falhas.push("reuniões");
+      }
+      if (rFixos.error) {
+        console.error("Erro ao carregar agendamentos fixos:", rFixos.error);
+        falhas.push("agendamentos fixos");
+      }
+      if (falhas.length > 0) {
+        setErroCarga(`Não foi possível carregar: ${falhas.join(", ")}.`);
+        return;
+      }
+      setErroCarga(null);
 
-    carregarDados();
+      if (rPlataforma.error) {
+        console.error("Erro ao carregar clientes da plataforma:", rPlataforma.error);
+        setPlataformaIndisponivel(true);
+        setClientesPlataforma([]);
+      } else {
+        setPlataformaIndisponivel(false);
+        setClientesPlataforma((rPlataforma.data ?? []) as ClientePlataforma[]);
+      }
+
+      // Fixos da planilha só servem para sincronizar; sem planilha, segue só com o banco.
+      let agendamentosSheetPayload: { configurado: boolean; agendamentos: AgendamentoFixoSheet[] } = {
+        configurado: false,
+        agendamentos: [],
+      };
+      if (respostaFixosSheet?.ok) {
+        agendamentosSheetPayload = await respostaFixosSheet.json();
+      }
+
+      const consultorasCarregadas = (rConsultoras.data ?? []) as Consultora[];
+      const reunioesCarregadas = (rReunioes.data ?? []) as Reuniao[];
+      const fixosCarregados = (rFixos.data ?? []) as AgendamentoFixo[];
+      setConsultoras(consultorasCarregadas);
+      // A planilha traz o nome da consultora, não o id (ver comentário em
+      // sincronizarAgendamentosComSheets) — resolve aqui também pra
+      // filtro/exibição por consultora funcionarem para esses clientes.
+      setClientes(
+        clientesDaSheet.map((c) => ({
+          ...c,
+          consultora_id:
+            resolverConsultoraId(c.consultora_id, consultorasCarregadas) ?? c.consultora_id,
+        })),
+      );
+
+      // Só sincroniza (grava no Supabase) quando a planilha real respondeu agora.
+      const agendamentosSincronizados = agendamentosSheetPayload.configurado
+        ? await sincronizarAgendamentosComSheets(
+            agendamentosSheetPayload.agendamentos,
+            fixosCarregados,
+            consultorasCarregadas,
+          )
+        : fixosCarregados;
+      setAgendamentosFixos(agendamentosSincronizados);
+
+      setReunioes(reunioesCarregadas);
+      const resultadoSync = await syncAgendamentosFixosToReunioes(
+        agendamentosSincronizados,
+        reunioesCarregadas,
+      );
+      if (resultadoSync.inseridas > 0) {
+        const { data: reunioesAtualizadas } = await supabase.from("reunioes").select("*");
+        setReunioes((reunioesAtualizadas ?? reunioesCarregadas) as Reuniao[]);
+      }
+    } catch (erro) {
+      console.error("Erro ao carregar dados:", erro);
+      setErroCarga("Não foi possível carregar os dados.");
+    } finally {
+      setCarregando(false);
+    }
   }, []);
+
+  // Carga inicial (a tela já nasce em "carregando"). Adiada com setTimeout para o estado não
+  // ser atualizado de forma síncrona dentro do efeito.
+  React.useEffect(() => {
+    const id = setTimeout(() => void carregarDados(true), 0);
+    return () => clearTimeout(id);
+  }, [carregarDados]);
+
+  // Reuniões canceladas (cliente inativado na plataforma) não contam como realizadas,
+  // pendentes nem "Marcada": todas as contas da tela partem desta lista.
+  const reunioesAtivas = React.useMemo(
+    () => reunioes.filter((r) => r.status !== "cancelada"),
+    [reunioes],
+  );
 
   // Junta cada cliente (Sheets) com sua reunião mais recente e a próxima agendada (Supabase).
   const linhas = React.useMemo<LinhaCliente[]>(() => {
     const hoje = new Date();
     return clientes.map((cliente) => {
-      const reunioesDoCliente = reunioes.filter(
+      const reunioesDoCliente = reunioesAtivas.filter(
         (r) => r.cliente_nome === cliente.cliente_nome,
       );
       const { ultimaReuniao, proximaReuniao } = separarUltimaEProximaReuniao(
@@ -244,7 +307,7 @@ export default function DashboardPage() {
         statusReuniao: emFoco ? calcularStatusReuniao(emFoco, hoje) : null,
       };
     });
-  }, [clientes, reunioes]);
+  }, [clientes, reunioesAtivas]);
 
   const linhasFiltradas = React.useMemo(() => {
     const hoje = new Date();
@@ -270,7 +333,7 @@ export default function DashboardPage() {
           estaNaSemanaAtual(linha.proximaReuniao?.data_reuniao, hoje);
         if (temReuniaoEstaSemana) return false;
       }
-      const reunioesDoCliente = reunioes.filter(
+      const reunioesDoCliente = reunioesAtivas.filter(
         (r) => r.cliente_nome === linha.cliente.cliente_nome,
       );
       if (apenasFaltandoSemana) {
@@ -333,7 +396,7 @@ export default function DashboardPage() {
           proximaOcorrenciaDiaSemana(agendamento.dia_semana, hoje),
           "yyyy-MM-dd",
         );
-        const marcada = reunioes.some(
+        const marcada = reunioesAtivas.some(
           (r) =>
             r.cliente_nome === agendamento.cliente_nome &&
             r.data_reuniao === proximaOcorrencia,
@@ -344,7 +407,7 @@ export default function DashboardPage() {
           statusSemana: marcada ? "marcada" : "faltando",
         };
       });
-  }, [agendamentosFixos, reunioes]);
+  }, [agendamentosFixos, reunioesAtivas]);
 
   /** Reuniões ainda por acontecer nesta semana (hoje até domingo) — as geradas pelos agendamentos fixos + manuais. */
   const reunioesRestantesSemana = React.useMemo(() => {
@@ -395,7 +458,7 @@ export default function DashboardPage() {
       if (error) throw error;
       setReunioes((atual) => [...atual, inserida as Reuniao]);
     } else {
-      setReunioes((atual) => [...atual, novaReuniao]);
+      throw new Error("Supabase não configurado.");
     }
 
     toast.success(`Reunião agendada para ${clienteNome}.`);
@@ -490,6 +553,45 @@ export default function DashboardPage() {
     toast.success("Agendamento fixo removido");
   }
 
+  /** Admin gerencia todos; consultora só os fixos dela (o banco valida de verdade — isto só esconde botões). */
+  function podeGerenciarFixo(fixo: AgendamentoFixo): boolean {
+    return ehAdmin || (minhaConsultoraId !== null && fixo.consultora_id === minhaConsultoraId);
+  }
+
+  const fixosInativos = agendamentosFixos.filter((a) => a.ativo === false);
+
+  // Clientes ativos da plataforma que ainda não têm fixo ativo (a view já limita a consultora aos dela).
+  const clientesElegiveis = React.useMemo(() => {
+    const comFixoAtivo = new Set(
+      agendamentosFixos.filter((a) => a.ativo !== false && a.cliente_id).map((a) => a.cliente_id),
+    );
+    return clientesPlataforma.filter((c) => !clienteEstaInativo(c) && !comFixoAtivo.has(c.id));
+  }, [clientesPlataforma, agendamentosFixos]);
+
+  async function criarFixo(params: NovoAgendamentoFixoParams) {
+    await criarAgendamentoFixo(params);
+    toast.success("Agendamento fixo criado");
+    // Recarrega: roda a geração de reuniões já existente e traz o fixo e as reuniões novas.
+    await carregarDados(true);
+  }
+
+  async function transferirFixo(fixoId: string, paraConsultoraId: string) {
+    const resultado = await transferirCliente(fixoId, paraConsultoraId);
+    const reunioesTxt = resultado.reunioes === 1 ? "reunião" : "reuniões";
+    const contratosTxt = resultado.contratos === 1 ? "contrato" : "contratos";
+    toast.success(
+      `${resultado.reunioes} ${reunioesTxt} e ${resultado.contratos} ${contratosTxt} atualizados`,
+    );
+    await carregarDados(true);
+  }
+
+  async function reativarFixo(fixo: AgendamentoFixo) {
+    await reativarAgendamentoFixo(fixo.id);
+    toast.success("Agendamento fixo reativado");
+    // Recarrega: a geração recria a próxima ocorrência (reuniões canceladas não bloqueiam).
+    await carregarDados(true);
+  }
+
   // --- Controle do modal ---
 
   function abrirAgendar(clienteNome = "") {
@@ -543,6 +645,24 @@ export default function DashboardPage() {
   /** A planilha só traz o id da consultora; aqui resolvemos o nome para exibição. */
   function nomeConsultora(consultoraId: string) {
     return consultoras.find((c) => c.id === consultoraId)?.nome ?? consultoraId;
+  }
+
+  if (erroCarga && !carregando) {
+    return (
+      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 p-4 sm:p-6 lg:p-8">
+        <header className="flex flex-col gap-1">
+          <h1 className="text-[28px] font-bold tracking-tight text-heading">Dashboard INSIGHT</h1>
+        </header>
+        <div
+          role="alert"
+          className="flex flex-col items-start gap-3 rounded-xl border border-destructive/40 p-6"
+        >
+          <p className="font-semibold text-destructive">Não foi possível carregar os dados</p>
+          <p className="text-sm text-muted-foreground">{erroCarga}</p>
+          <Button onClick={() => void carregarDados()}>Tentar novamente</Button>
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -674,7 +794,7 @@ export default function DashboardPage() {
                     [linha.proximaReuniao, linha.ultimaReuniao].find(
                       (r) => r?.status === "agendada",
                     ) ?? null;
-                  const totalReunioes = reunioes.filter(
+                  const totalReunioes = reunioesAtivas.filter(
                     (r) => r.cliente_nome === linha.cliente.cliente_nome,
                   ).length;
                   return (
@@ -803,6 +923,7 @@ export default function DashboardPage() {
 
       {/* Agendamentos fixos: compromisso semanal recorrente por cliente */}
       <section className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex flex-col gap-1">
           <h2 className="text-lg font-bold text-heading">Agendamentos Fixos da Semana</h2>
           <p className="text-sm text-muted-foreground">
@@ -813,6 +934,22 @@ export default function DashboardPage() {
             Reuniões ainda por acontecer esta semana:{" "}
             <span className="text-heading">{reunioesRestantesSemana}</span>
           </p>
+        </div>
+          <div className="flex flex-col items-start gap-1 sm:items-end">
+            <Button
+              onClick={() => setNovoFixoAberto(true)}
+              disabled={plataformaIndisponivel}
+              className="w-full sm:w-auto"
+            >
+              <Plus className="mr-2 size-4" />
+              Novo agendamento fixo
+            </Button>
+            {plataformaIndisponivel && (
+              <p className="text-xs text-destructive">
+                Clientes da plataforma indisponíveis no momento.
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -863,6 +1000,16 @@ export default function DashboardPage() {
                     <TableRow key={linha.agendamento.id}>
                       <TableCell className="font-medium whitespace-nowrap">
                         {linha.agendamento.cliente_nome}
+                        {ehAdmin && !linha.agendamento.cliente_id && (
+                          <Badge
+                            variant="outline"
+                            title="Não será inativado automaticamente"
+                            className="ml-2 gap-1 border-amber-300 bg-amber-100 align-middle text-xs font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                          >
+                            <Unlink className="size-3" />
+                            Sem vínculo com a plataforma
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         {nomeConsultora(linha.agendamento.consultora_id ?? "")}
@@ -895,26 +1042,40 @@ export default function DashboardPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button
-                            size="icon-sm"
-                            variant="outline"
-                            className="rounded-full text-brand-blue dark:text-blue-400 transition-transform duration-200 hover:scale-105 hover:bg-brand-blue/10 hover:text-brand-blue"
-                            title="Editar agendamento fixo"
-                            aria-label={`Editar agendamento fixo de ${linha.agendamento.cliente_nome}`}
-                            onClick={() => setEdicaoFixoId(linha.agendamento.id)}
-                          >
-                            <Pencil className="size-4" />
-                          </Button>
-                          <Button
-                            size="icon-sm"
-                            variant="outline"
-                            className="rounded-full text-destructive transition-transform duration-200 hover:scale-105 hover:bg-destructive/10 hover:text-destructive"
-                            title="Remover agendamento fixo"
-                            aria-label={`Remover agendamento fixo de ${linha.agendamento.cliente_nome}`}
-                            onClick={() => setExclusaoFixoId(linha.agendamento.id)}
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
+                          {podeGerenciarFixo(linha.agendamento) && (
+                            <>
+                              <Button
+                                size="icon-sm"
+                                variant="outline"
+                                className="rounded-full text-brand-blue dark:text-blue-400 transition-transform duration-200 hover:scale-105 hover:bg-brand-blue/10 hover:text-brand-blue"
+                                title="Editar agendamento fixo"
+                                aria-label={`Editar agendamento fixo de ${linha.agendamento.cliente_nome}`}
+                                onClick={() => setEdicaoFixoId(linha.agendamento.id)}
+                              >
+                                <Pencil className="size-4" />
+                              </Button>
+                              <Button
+                                size="icon-sm"
+                                variant="outline"
+                                className="rounded-full text-brand-green-alt transition-transform duration-200 hover:scale-105 hover:bg-brand-green/10 hover:text-brand-green-alt dark:text-brand-green"
+                                title="Transferir para outra consultora"
+                                aria-label={`Transferir ${linha.agendamento.cliente_nome} para outra consultora`}
+                                onClick={() => setTransferirFixoId(linha.agendamento.id)}
+                              >
+                                <Users className="size-4" />
+                              </Button>
+                              <Button
+                                size="icon-sm"
+                                variant="outline"
+                                className="rounded-full text-destructive transition-transform duration-200 hover:scale-105 hover:bg-destructive/10 hover:text-destructive"
+                                title="Remover agendamento fixo"
+                                aria-label={`Remover agendamento fixo de ${linha.agendamento.cliente_nome}`}
+                                onClick={() => setExclusaoFixoId(linha.agendamento.id)}
+                              >
+                                <Trash2 className="size-4" />
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -924,6 +1085,16 @@ export default function DashboardPage() {
           </div>
         </div>
       </section>
+
+      {ehAdmin && (
+        <FixosInativosSection
+          inativos={fixosInativos}
+          consultoras={consultoras}
+          clientesPlataforma={clientesPlataforma}
+          plataformaDisponivel={!plataformaIndisponivel}
+          onReativar={reativarFixo}
+        />
+      )}
 
       <ReuniaoModal
         open={modal.open}
@@ -963,6 +1134,25 @@ export default function DashboardPage() {
         open={reuniaoPorId(remarcarId) !== null}
         onOpenChange={(open) => !open && setRemarcarId(null)}
         onRemarcar={remarcarReuniao}
+      />
+
+      <NovoAgendamentoFixoModal
+        open={novoFixoAberto}
+        onOpenChange={setNovoFixoAberto}
+        clientesElegiveis={clientesElegiveis}
+        consultoras={consultoras}
+        ehAdmin={ehAdmin}
+        consultoraLogadaId={minhaConsultoraId}
+        onCriar={criarFixo}
+      />
+
+      <TransferirFixoModal
+        agendamento={agendamentoFixoPorId(transferirFixoId)}
+        consultoras={consultoras}
+        reunioes={reunioes}
+        open={agendamentoFixoPorId(transferirFixoId) !== null}
+        onOpenChange={(open) => !open && setTransferirFixoId(null)}
+        onTransferir={transferirFixo}
       />
 
       <EditAgendamentoFixoModal

@@ -1,5 +1,5 @@
 // Badge visual do status de uma reunião (ver `calcularStatusReuniao` em lib/utils.ts):
-// azul (agendada), laranja (pendente_drive), vermelho (atrasado) ou verde (finalizada).
+// azul (agendada), laranja (pendente_drive), vermelho (atrasado), verde (finalizada) ou cinza (cancelada).
 // Usado pela tabela e pelo modal de detalhes — assim os dois mostram sempre o mesmo.
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,11 @@ const CONFIG: Record<StatusReuniaoCalculado, { label: string; icone: string; cla
     icone: "🔴",
     className:
       "bg-red-100 text-red-800 border-red-300 dark:bg-red-950 dark:text-red-300 dark:border-red-800",
+  },
+  cancelada: {
+    label: "Cancelada",
+    icone: "🚫",
+    className: "border-border bg-muted text-muted-foreground",
   },
   finalizada: {
     label: "Finalizada",
