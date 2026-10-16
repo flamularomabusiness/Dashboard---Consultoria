@@ -61,6 +61,7 @@ import {
   type NovoAgendamentoFixoParams,
 } from "@/lib/agendamentos";
 import { useIdentidade } from "@/lib/auth-context";
+import { consultorasParaFiltro } from "@/lib/consultoras";
 import {
   atualizarReuniao,
   deletarReuniao,
@@ -177,7 +178,7 @@ export default function DashboardPage() {
         await Promise.all([
           fetchAutenticado("/api/clientes").catch(() => null),
           fetchAutenticado("/api/agendamentos-fixos").catch(() => null),
-          supabase.from("consultoras").select("*"),
+          supabase.from("consultoras").select("id,nome,tipo"),
           supabase.from("reunioes").select("*"),
           supabase.from("agendamentos_fixos").select("*"),
           supabase.from("dash_clientes").select(COLUNAS_DASH_CLIENTES),
@@ -279,6 +280,18 @@ export default function DashboardPage() {
     const id = setTimeout(() => void carregarDados(true), 0);
     return () => clearTimeout(id);
   }, [carregarDados]);
+
+  // Filtro "Todas as consultoras": as de tipo 'consultora' + qualquer responsável que tenha
+  // clientes, reuniões ou fixos (mentor/bpo com carteira não pode sumir do filtro).
+  const consultorasFiltro = React.useMemo(
+    () =>
+      consultorasParaFiltro(consultoras, [
+        ...clientes.map((c) => c.consultora_id),
+        ...reunioes.map((r) => r.consultora_id),
+        ...agendamentosFixos.map((a) => a.consultora_id),
+      ]),
+    [consultoras, clientes, reunioes, agendamentosFixos],
+  );
 
   // Reuniões canceladas (cliente inativado na plataforma) não contam como realizadas,
   // pendentes nem "Marcada": todas as contas da tela partem desta lista.
@@ -706,7 +719,7 @@ export default function DashboardPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todas">Todas as consultoras</SelectItem>
-              {consultoras.map((c) => (
+              {consultorasFiltro.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   {c.nome}
                 </SelectItem>

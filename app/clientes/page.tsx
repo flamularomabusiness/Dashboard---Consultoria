@@ -24,6 +24,7 @@ import { EditClienteModal } from "@/components/EditClienteModal";
 import { StatsCard } from "@/components/StatsCard";
 import { atualizarContratoInsight, type CamposContratoInsight } from "@/lib/contratos";
 import { clienteCombinaComBusca } from "@/lib/busca-clientes";
+import { consultorasParaFiltro } from "@/lib/consultoras";
 import { useBusca } from "@/lib/search-context";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { clienteEstaInativo, type ClienteCRM, type Consultora, type Contrato, type Reuniao, type StatusCliente } from "@/lib/types";
@@ -96,7 +97,7 @@ export default function ClientesPage() {
           .from("dash_clientes")
           .select(COLUNAS_DASH_CLIENTES)
           .order("data_criacao", { ascending: false }),
-        supabase.from("consultoras").select("*"),
+        supabase.from("consultoras").select("id,nome,tipo"),
         supabase.from("reunioes").select("*"),
         // dash_contratos já traz o nome do produto em `produto_nome` (sem embed).
         // O filtro mantém só CONSULTORIA FINANCEIRA (ROMA 20) / CONSULTORIA GREEN+
@@ -185,6 +186,17 @@ export default function ClientesPage() {
       null
     );
   }
+
+  // Filtro "Todas as consultoras": as de tipo 'consultora' + qualquer responsável que tenha
+  // contratos (clientes) ou reuniões, para ninguém sumir do filtro.
+  const consultorasFiltro = React.useMemo(
+    () =>
+      consultorasParaFiltro(consultoras, [
+        ...contratos.map((c) => c.consultora_id),
+        ...reunioes.map((r) => r.consultora_id),
+      ]),
+    [consultoras, contratos, reunioes],
+  );
 
   // Universo antes dos demais filtros: sem os inativos (padrão), a menos que "Mostrar inativos"
   // esteja marcado ou o filtro de status seja INATIVO (aí só eles aparecem).
@@ -337,7 +349,7 @@ export default function ClientesPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todas">Todas as consultoras</SelectItem>
-              {consultoras.map((c) => (
+              {consultorasFiltro.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   {c.nome}
                 </SelectItem>

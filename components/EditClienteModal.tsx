@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useIdentidade } from "@/lib/auth-context";
+import { consultorasResponsavel } from "@/lib/consultoras";
 import type { CamposContratoInsight } from "@/lib/contratos";
 import { mensagemDeErro } from "@/lib/reunioes";
 import type { ClienteCRM, Consultora, Contrato } from "@/lib/types";
@@ -105,6 +106,8 @@ function EditClienteForm({
     ehAdmin ||
     (minhaConsultoraId !== null && contrato.consultora_id === minhaConsultoraId);
   const semResponsavel = !contrato.consultora_id;
+  // Tipo 'consultora' (admin: + 'mentor'); a responsável atual de outro tipo segue visível.
+  const opcoesResponsavel = consultorasResponsavel(consultoras, ehAdmin, contrato.consultora_id);
 
   // Só manda o que mudou, pra não sobrescrever edição feita ao mesmo tempo na plataforma.
   const campos: CamposContratoInsight = {};
@@ -196,7 +199,7 @@ function EditClienteForm({
             <SelectContent>
               {/* Só o admin pode deixar o cliente sem responsável; a consultora não. */}
               {ehAdmin && <SelectItem value={SEM_CONSULTORA}>Sem responsável</SelectItem>}
-              {consultoras.map((c) => (
+              {opcoesResponsavel.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   {c.nome}
                 </SelectItem>

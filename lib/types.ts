@@ -1,9 +1,14 @@
 // Tipos compartilhados do dashboard de ATAs de reuniões.
 
 /** Consultora responsável por uma carteira de clientes (tabela Supabase "consultoras"). */
+/** Tipo de quem aparece em `consultoras`: só 'consultora' atende carteira de clientes por padrão. */
+export type TipoConsultora = "consultora" | "mentor" | "bpo";
+
 export interface Consultora {
   id: string;
   nome: string;
+  /** Coluna `tipo` da tabela consultoras. */
+  tipo?: TipoConsultora | null;
 }
 
 /**

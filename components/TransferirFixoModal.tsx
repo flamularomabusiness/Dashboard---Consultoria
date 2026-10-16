@@ -24,6 +24,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useIdentidade } from "@/lib/auth-context";
+import { consultorasDestino } from "@/lib/consultoras";
 import { mensagemDeErro } from "@/lib/reunioes";
 import type { AgendamentoFixo, Consultora, Reuniao } from "@/lib/types";
 import { dataLocalISO } from "@/lib/utils";
@@ -62,12 +64,14 @@ function TransferirForm({
   onTransferir,
   onFechar,
 }: TransferirFixoModalProps & { agendamento: AgendamentoFixo; onFechar: () => void }) {
+  const { ehAdmin } = useIdentidade();
   const [paraId, setParaId] = React.useState("");
   const [salvando, setSalvando] = React.useState(false);
 
   const atual = consultoras.find((c) => c.id === agendamento.consultora_id) ?? null;
   const nomeAtual = atual?.nome ?? "a consultora atual";
-  const destinos = consultoras.filter((c) => c.id !== agendamento.consultora_id);
+  // Só tipo 'consultora' (admin: + 'mentor'), menos a atual — o banco recusa o resto.
+  const destinos = consultorasDestino(consultoras, ehAdmin, agendamento.consultora_id);
 
   const hojeISO = dataLocalISO();
   const futuras = reunioes.filter(
