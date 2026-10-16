@@ -61,7 +61,9 @@ import {
   type NovoAgendamentoFixoParams,
 } from "@/lib/agendamentos";
 import { useIdentidade } from "@/lib/auth-context";
+import { agruparReunioesPorCliente, unirClientesComFixos } from "@/lib/clientes-dashboard";
 import { consultorasParaFiltro } from "@/lib/consultoras";
+import { mesmoCliente, normalizarNome } from "@/lib/nomes-cliente";
 import {
   atualizarReuniao,
   deletarReuniao,
@@ -113,7 +115,7 @@ interface ModalState {
 export default function DashboardPage() {
   const { busca } = useBusca();
   const { ehAdmin, consultoraId: minhaConsultoraId } = useIdentidade();
-  const [clientes, setClientes] = React.useState<Cliente[]>([]);
+  const [clientesPlanilha, setClientesPlanilha] = React.useState<Cliente[]>([]);
   const [consultoras, setConsultoras] = React.useState<Consultora[]>([]);
   const [reunioes, setReunioes] = React.useState<Reuniao[]>([]);
   const [agendamentosFixos, setAgendamentosFixos] = React.useState<AgendamentoFixo[]>([]);
@@ -122,6 +124,13 @@ export default function DashboardPage() {
   const [erroCarga, setErroCarga] = React.useState<string | null>(null);
   const [clientesPlataforma, setClientesPlataforma] = React.useState<ClientePlataforma[]>([]);
   const [plataformaIndisponivel, setPlataformaIndisponivel] = React.useState(false);
+
+  // Tabela principal: clientes da planilha + os que só existem em agendamentos fixos ativos
+  // (sem duplicar quem já está na planilha; a consultora do extra vem do fixo).
+  const clientes = React.useMemo(
+    () => unirClientesComFixos(clientesPlanilha, agendamentosFixos),
+    [clientesPlanilha, agendamentosFixos],
+  );
 
   const [filtroConsultora, setFiltroConsultora] = React.useState("todas");
   const [filtroStatus, setFiltroStatus] = React.useState<StatusReuniaoCalculado | "todos">("todos");
@@ -239,7 +248,7 @@ export default function DashboardPage() {
       // A planilha traz o nome da consultora, não o id (ver comentário em
       // sincronizarAgendamentosComSheets) — resolve aqui também pra
       // filtro/exibição por consultora funcionarem para esses clientes.
-      setClientes(
+      setClientesPlanilha(
         clientesDaSheet.map((c) => ({
           ...c,
           consultora_id:
@@ -300,13 +309,17 @@ export default function DashboardPage() {
     [reunioes],
   );
 
-  // Junta cada cliente (Sheets) com sua reunião mais recente e a próxima agendada (Supabase).
+  // Reuniões por nome normalizado: o cliente da planilha e o do fixo podem grafar o nome diferente.
+  const reunioesPorCliente = React.useMemo(
+    () => agruparReunioesPorCliente(reunioesAtivas),
+    [reunioesAtivas],
+  );
+
+  // Junta cada cliente (planilha + fixos) com sua reunião mais recente e a próxima agendada (Supabase).
   const linhas = React.useMemo<LinhaCliente[]>(() => {
     const hoje = new Date();
     return clientes.map((cliente) => {
-      const reunioesDoCliente = reunioesAtivas.filter(
-        (r) => r.cliente_nome === cliente.cliente_nome,
-      );
+      const reunioesDoCliente = reunioesPorCliente.get(normalizarNome(cliente.cliente_nome)) ?? [];
       const { ultimaReuniao, proximaReuniao } = separarUltimaEProximaReuniao(
         reunioesDoCliente,
         hoje,
@@ -320,7 +333,7 @@ export default function DashboardPage() {
         statusReuniao: emFoco ? calcularStatusReuniao(emFoco, hoje) : null,
       };
     });
-  }, [clientes, reunioesAtivas]);
+  }, [clientes, reunioesPorCliente]);
 
   const linhasFiltradas = React.useMemo(() => {
     const hoje = new Date();
@@ -346,9 +359,8 @@ export default function DashboardPage() {
           estaNaSemanaAtual(linha.proximaReuniao?.data_reuniao, hoje);
         if (temReuniaoEstaSemana) return false;
       }
-      const reunioesDoCliente = reunioesAtivas.filter(
-        (r) => r.cliente_nome === linha.cliente.cliente_nome,
-      );
+      const reunioesDoCliente =
+        reunioesPorCliente.get(normalizarNome(linha.cliente.cliente_nome)) ?? [];
       if (apenasFaltandoSemana) {
         const temFaltandoEstaSemana = reunioesDoCliente.some((r) => {
           const data = parseISO(r.data_reuniao);
@@ -390,8 +402,8 @@ export default function DashboardPage() {
       filtroConsultora === "todas"
         ? reunioes
         : reunioes.filter((r) => {
-            const consultoraDoCliente = clientes.find(
-              (c) => c.cliente_nome === r.cliente_nome,
+            const consultoraDoCliente = clientes.find((c) =>
+              mesmoCliente(c.cliente_nome, r.cliente_nome),
             )?.consultora_id;
             return (consultoraDoCliente ?? r.consultora_id) === filtroConsultora;
           });
@@ -807,9 +819,8 @@ export default function DashboardPage() {
                     [linha.proximaReuniao, linha.ultimaReuniao].find(
                       (r) => r?.status === "agendada",
                     ) ?? null;
-                  const totalReunioes = reunioesAtivas.filter(
-                    (r) => r.cliente_nome === linha.cliente.cliente_nome,
-                  ).length;
+                  const totalReunioes =
+                    reunioesPorCliente.get(normalizarNome(linha.cliente.cliente_nome))?.length ?? 0;
                   return (
                     <TableRow key={linha.cliente.cliente_nome}>
                       <TableCell className="font-medium whitespace-nowrap">
