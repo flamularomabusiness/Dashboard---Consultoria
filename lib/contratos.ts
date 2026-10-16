@@ -1,7 +1,12 @@
-// Edição dos dados do cliente que moram em "contratos" (consultora, conselheiro e
-// perfil/contexto). Passa pela função atualizar_contrato_insight do Supabase em vez
-// de um UPDATE direto: a tabela tem valores financeiros e a chave anon é pública,
-// então a função só aceita alterar esses três campos (ver supabase/schema.sql).
+// Edição dos dados do cliente que moram em "contratos" (consultora responsável,
+// conselheiro e perfil/contexto), sempre pela função atualizar_contrato_insight do
+// Supabase (nunca UPDATE direto: a tabela tem valores financeiros).
+//
+// A função valida a permissão NO BANCO: admin edita qualquer contrato; consultora só
+// os contratos em que é a responsável, e pode trocar a responsável por outra consultora
+// existente (não pode deixar vazio nem assumir contrato sem responsável). Trocar a
+// responsável também move o agendamento fixo e as reuniões futuras do cliente.
+// Os erros vêm em português em `error.message` — é essa mensagem que o usuário vê.
 import { supabase } from "@/lib/supabase";
 
 export interface CamposContratoInsight {
@@ -23,11 +28,10 @@ export async function atualizarContratoInsight(
 
   if (error) {
     if (error.code === "PGRST202") {
-      throw new Error(
-        "A função atualizar_contrato_insight não existe no Supabase — rode o SQL de supabase/schema.sql.",
-      );
+      throw new Error("A função atualizar_contrato_insight não existe no Supabase.");
     }
-    throw error;
+    throw new Error(error.message || "Não foi possível salvar os dados do cliente.");
   }
-  if (data !== true) throw new Error("Contrato não encontrado.");
+  // A função devolve false quando o contrato não existe (ou não é visível para o usuário).
+  if (data === false) throw new Error("Contrato não encontrado.");
 }

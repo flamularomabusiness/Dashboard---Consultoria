@@ -229,22 +229,17 @@ export default function ClientesPage() {
   }
 
   const clienteEdicao = clientes.find((c) => c.id === edicaoClienteId) ?? null;
+  const clienteDetalhesAtual = clientes.find((c) => c.id === clienteDetalhes?.id) ?? null;
 
+  /**
+   * Salva pela RPC (que valida a permissão no banco; se falhar, o erro em português vai
+   * para o toast do modal) e RECARREGA os dados: trocar a responsável também move o
+   * agendamento fixo e as reuniões futuras, e a consultora que perdeu o cliente deixa de vê-lo.
+   */
   async function salvarDadosCliente(contratoId: string, campos: CamposContratoInsight) {
     await atualizarContratoInsight(contratoId, campos);
-    const { conselheiro, ...demais } = campos;
-    setContratos((atual) =>
-      atual.map((c) =>
-        c.id === contratoId
-          ? {
-              ...c,
-              ...demais,
-              ...(conselheiro !== undefined && { conselheiro: conselheiro || null }),
-            }
-          : c,
-      ),
-    );
     toast.success("Dados do cliente atualizados");
+    await carregarDados(true);
   }
 
   // Sempre sobre os clientes ativos (antes dos filtros), igual ao resumo da página "/".
@@ -413,13 +408,13 @@ export default function ClientesPage() {
       )}
 
       <ClienteModal
-        cliente={clienteDetalhes}
-        consultora={consultoraDoContrato(clienteDetalhes ? contratoDoCliente(clienteDetalhes) : null)}
-        contrato={clienteDetalhes ? contratoDoCliente(clienteDetalhes) : null}
-        ultimasReunioes={clienteDetalhes ? ultimasReunioesDoCliente(clienteDetalhes) : []}
+        cliente={clienteDetalhesAtual}
+        consultora={consultoraDoContrato(clienteDetalhesAtual ? contratoDoCliente(clienteDetalhesAtual) : null)}
+        contrato={clienteDetalhesAtual ? contratoDoCliente(clienteDetalhesAtual) : null}
+        ultimasReunioes={clienteDetalhesAtual ? ultimasReunioesDoCliente(clienteDetalhesAtual) : []}
         open={modalAberto}
         onOpenChange={setModalAberto}
-        onEditar={() => clienteDetalhes && setEdicaoClienteId(clienteDetalhes.id)}
+        onEditar={() => clienteDetalhesAtual && setEdicaoClienteId(clienteDetalhesAtual.id)}
       />
 
       <EditClienteModal

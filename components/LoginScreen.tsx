@@ -1,5 +1,7 @@
-// Tela de login do INSIGHT (e-mail + senha do Supabase Auth, as mesmas da plataforma).
-// Também cobre o caso "logado, mas sem permissão" (sem_acesso).
+// Tela de entrada do INSIGHT (e-mail + senha do Supabase Auth, as mesmas da plataforma).
+// Cobre também: criar conta (só emails liberados pelo administrador conseguem) e os casos
+// "logado, mas sem permissão" (sem_acesso) e "não deu para verificar a permissão" (erro_acesso).
+// Nenhuma tela de dados é montada enquanto o usuário não está autorizado (ver AppShell).
 "use client";
 
 import * as React from "react";
@@ -11,6 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth-context";
+import { nomeCompletoValido, normalizarNomeCompleto } from "@/lib/erros-auth";
+
+const SENHA_MINIMA = 6;
 
 /** Alternador claro/noturno no canto da tela (o header do app ainda não existe aqui). */
 function ThemeToggle() {
@@ -38,23 +43,58 @@ function ThemeToggle() {
   );
 }
 
+type Modo = "entrar" | "criar";
+
 export function LoginScreen() {
-  const { estado, entrar, sair } = useAuth();
+  const { estado, entrar, criarConta, verificarAcesso, sair } = useAuth();
+  const [modo, setModo] = React.useState<Modo>("entrar");
+  const [nome, setNome] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [senha, setSenha] = React.useState("");
-  const [entrando, setEntrando] = React.useState(false);
+  const [enviando, setEnviando] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
+  const [aviso, setAviso] = React.useState<string | null>(null);
+
+  const criando = modo === "criar";
+  const nomeOk = nomeCompletoValido(nome);
+  const senhaOk = senha.length >= SENHA_MINIMA;
+  const podeEnviar = criando ? nomeOk && email !== "" && senhaOk : email !== "" && senha !== "";
+
+  function trocarModo(proximo: Modo) {
+    setModo(proximo);
+    setErro(null);
+    setAviso(null);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setEntrando(true);
+    if (!podeEnviar) return;
+    setEnviando(true);
     setErro(null);
+    setAviso(null);
     try {
-      await entrar(email, senha);
+      if (criando) {
+        const { precisaConfirmar } = await criarConta(normalizarNomeCompleto(nome), email, senha);
+        if (precisaConfirmar) {
+          // Sem sessão ainda: o Supabase mandou um email de confirmação.
+          setSenha("");
+          setModo("entrar");
+          setAviso("Conta criada! Confirme seu email pelo link que enviamos e depois entre.");
+        }
+        // Com sessão, o AuthProvider assume e a tela troca sozinha.
+      } else {
+        await entrar(email, senha);
+      }
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Não foi possível entrar.");
+      setErro(
+        err instanceof Error
+          ? err.message
+          : criando
+            ? "Não foi possível criar a conta."
+            : "Não foi possível entrar.",
+      );
     } finally {
-      setEntrando(false);
+      setEnviando(false);
     }
   }
 
@@ -87,10 +127,16 @@ export function LoginScreen() {
         {estado.status === "sem_acesso" ? (
           <div className="flex flex-col gap-4 text-sm">
             <div>
-              <h1 className="text-lg font-semibold text-heading">Sem acesso ao INSIGHT</h1>
+              <h1 className="text-lg font-semibold text-heading">
+                Seu usuário não tem acesso ao Dashboard de ATAs
+              </h1>
               <p className="mt-1 text-muted-foreground">
-                {estado.email ? <strong className="text-foreground">{estado.email}</strong> : "Esta conta"}{" "}
-                está logada, mas não tem permissão para usar o INSIGHT. O acesso é restrito às
+                {estado.email ? (
+                  <strong className="text-foreground">{estado.email}</strong>
+                ) : (
+                  "Esta conta"
+                )}{" "}
+                está logada, mas não tem permissão para usar o dashboard. O acesso é restrito às
                 consultoras e administradores. Fale com o administrador se isso for um engano.
               </p>
             </div>
@@ -99,14 +145,55 @@ export function LoginScreen() {
               Sair
             </Button>
           </div>
+        ) : estado.status === "erro_acesso" ? (
+          <div className="flex flex-col gap-4 text-sm">
+            <div>
+              <h1 className="text-lg font-semibold text-heading">
+                Não foi possível verificar seu acesso
+              </h1>
+              <p className="mt-1 text-muted-foreground">
+                Houve uma falha ao consultar suas permissões. Tente novamente em instantes.
+              </p>
+            </div>
+            <Button type="button" onClick={() => void verificarAcesso()}>
+              Tentar novamente
+            </Button>
+            <Button type="button" variant="outline" onClick={() => void sair()}>
+              <LogOut className="size-4" />
+              Sair
+            </Button>
+          </div>
         ) : (
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div>
-              <h1 className="text-lg font-semibold text-heading">Entrar</h1>
+              <h1 className="text-lg font-semibold text-heading">
+                {criando ? "Criar conta" : "Entrar"}
+              </h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Use o mesmo e-mail e a mesma senha da plataforma.
+                {criando
+                  ? "Só emails liberados pelo administrador conseguem criar conta."
+                  : "Use o mesmo e-mail e a mesma senha da plataforma."}
               </p>
             </div>
+
+            {criando && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="login-nome">Nome completo</Label>
+                <Input
+                  id="login-nome"
+                  type="text"
+                  autoComplete="name"
+                  required
+                  value={nome}
+                  onChange={(e) => setNome(e.target.value)}
+                  disabled={enviando}
+                  aria-invalid={nome !== "" && !nomeOk}
+                />
+                {nome !== "" && !nomeOk && (
+                  <p className="text-xs text-destructive">Informe o nome completo (mínimo de 3 letras).</p>
+                )}
+              </div>
+            )}
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="login-email">E-mail</Label>
@@ -117,7 +204,7 @@ export function LoginScreen() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                disabled={entrando}
+                disabled={enviando}
               />
             </div>
 
@@ -126,14 +213,23 @@ export function LoginScreen() {
               <Input
                 id="login-senha"
                 type="password"
-                autoComplete="current-password"
+                autoComplete={criando ? "new-password" : "current-password"}
                 required
+                minLength={criando ? SENHA_MINIMA : undefined}
                 value={senha}
                 onChange={(e) => setSenha(e.target.value)}
-                disabled={entrando}
+                disabled={enviando}
               />
+              {criando && (
+                <p className="text-xs text-muted-foreground">Mínimo de {SENHA_MINIMA} caracteres.</p>
+              )}
             </div>
 
+            {aviso && (
+              <p role="status" className="text-sm text-brand-green-alt dark:text-brand-green">
+                {aviso}
+              </p>
+            )}
             {erro && (
               <p role="alert" className="text-sm text-destructive">
                 {erro}
@@ -142,12 +238,24 @@ export function LoginScreen() {
 
             <Button
               type="submit"
-              disabled={entrando || !email || !senha}
+              disabled={enviando || !podeEnviar}
               className="rounded-full border-none bg-gradient-to-r from-brand-blue to-brand-green text-white hover:brightness-110"
             >
-              {entrando && <Loader2 className="size-4 animate-spin" />}
-              Entrar
+              {enviando && <Loader2 className="size-4 animate-spin" />}
+              {criando ? "Criar conta" : "Entrar"}
             </Button>
+
+            <p className="text-center text-sm text-muted-foreground">
+              {criando ? "Já tem conta?" : "Ainda não tem conta?"}{" "}
+              <button
+                type="button"
+                onClick={() => trocarModo(criando ? "entrar" : "criar")}
+                disabled={enviando}
+                className="font-medium text-brand-blue underline-offset-4 hover:underline dark:text-brand-green"
+              >
+                {criando ? "Entrar" : "Criar conta"}
+              </button>
+            </p>
           </form>
         )}
       </div>

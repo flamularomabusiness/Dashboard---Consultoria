@@ -8,6 +8,7 @@
 import * as React from "react";
 import type { Session } from "@supabase/supabase-js";
 
+import { traduzirErroCadastro } from "@/lib/erros-auth";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 export interface PerfilInsight {
@@ -21,12 +22,19 @@ export interface PerfilInsight {
 export type EstadoAuth =
   | { status: "carregando" }
   | { status: "deslogado" }
+  /** Logado, mas sem permissão para o dashboard (perfil_insight vazio). */
   | { status: "sem_acesso"; email: string | null }
+  /** Logado, mas não foi possível verificar a permissão (falha de rede/banco) — diferente de "sem acesso". */
+  | { status: "erro_acesso"; email: string | null }
   | { status: "autorizado"; perfil: PerfilInsight };
 
 interface AuthContextValue {
   estado: EstadoAuth;
   entrar: (email: string, senha: string) => Promise<void>;
+  /** Cria a conta (nome vai em options.data.nome). `precisaConfirmar`: o Supabase exige confirmar o email antes de entrar. */
+  criarConta: (nome: string, email: string, senha: string) => Promise<{ precisaConfirmar: boolean }>;
+  /** Refaz a checagem de permissão do usuário logado (botão "Tentar novamente"). */
+  verificarAcesso: () => Promise<void>;
   sair: () => Promise<void>;
 }
 
@@ -38,9 +46,10 @@ async function resolverEstado(session: Session | null): Promise<EstadoAuth> {
 
   const { data, error } = await supabase.rpc("perfil_insight");
   if (error) {
-    // Função ainda não criada (SQL não rodado) ou falha de rede: não libera nada.
+    // Falha de rede/banco (ou função ausente): não libera nada, mas também não afirma que
+    // a pessoa "não tem acesso" — pede para tentar de novo.
     console.error("Erro ao verificar acesso ao INSIGHT:", error.message);
-    return { status: "sem_acesso", email: session.user.email ?? null };
+    return { status: "erro_acesso", email: session.user.email ?? null };
   }
   const perfil = Array.isArray(data) ? data[0] : data;
   if (!perfil) return { status: "sem_acesso", email: session.user.email ?? null };
@@ -96,12 +105,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const criarConta = React.useCallback(async (nome: string, email: string, senha: string) => {
+    if (!supabase) throw new Error("Supabase não configurado.");
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password: senha,
+      options: { data: { nome } },
+    });
+    if (error) {
+      console.error("Erro ao criar conta:", error.message);
+      throw new Error(traduzirErroCadastro(error.message));
+    }
+    // Com confirmação de email ligada, um email que já tem conta não dá erro: o Supabase
+    // devolve um usuário sem identidades (para não revelar quais emails existem).
+    if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      throw new Error("Este email já possui conta. Entre com sua senha.");
+    }
+    return { precisaConfirmar: !data.session };
+  }, []);
+
+  const verificarAcesso = React.useCallback(async () => {
+    if (!supabase) return;
+    setEstado({ status: "carregando" });
+    const { data } = await supabase.auth.getSession();
+    setEstado(await resolverEstado(data.session));
+  }, []);
+
   const sair = React.useCallback(async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
   }, []);
 
-  const valor = React.useMemo(() => ({ estado, entrar, sair }), [estado, entrar, sair]);
+  const valor = React.useMemo(
+    () => ({ estado, entrar, criarConta, verificarAcesso, sair }),
+    [estado, entrar, criarConta, verificarAcesso, sair],
+  );
   return <AuthContext.Provider value={valor}>{children}</AuthContext.Provider>;
 }
 

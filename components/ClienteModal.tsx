@@ -13,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConsultoraResponsavel } from "@/components/ConsultoraResponsavel";
 import { StatusClienteBadge } from "@/components/StatusClienteBadge";
 import type { ClienteCRM, Consultora, Contrato, Reuniao } from "@/lib/types";
 import { formatarData, formatarMoedaBR } from "@/lib/utils";
@@ -84,7 +85,9 @@ export function ClienteModal({
           <dd>{formatarData(cliente.data_inicio_contrato)}</dd>
 
           <dt className="text-muted-foreground">Consultora</dt>
-          <dd>{consultora?.nome ?? "-"}</dd>
+          <dd>
+            <ConsultoraResponsavel consultora={consultora} />
+          </dd>
 
           <dt className="text-muted-foreground">Conselheiro(a)</dt>
           <dd>

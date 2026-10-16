@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader } from "@/components/ui/card";
 import { ClienteHoverCard } from "@/components/ClienteHoverCard";
+import { ConsultoraResponsavel } from "@/components/ConsultoraResponsavel";
 import { StatusClienteBadge } from "@/components/StatusClienteBadge";
 import type { ClienteCRM, Consultora, Reuniao } from "@/lib/types";
 import { cn, formatarData } from "@/lib/utils";
@@ -76,7 +77,9 @@ export function ClienteCard({
       </CardHeader>
 
       <CardContent className="flex flex-col">
-        <InfoRow label="Consultora">{consultora?.nome ?? "-"}</InfoRow>
+        <InfoRow label="Consultora">
+          <ConsultoraResponsavel consultora={consultora} />
+        </InfoRow>
         <InfoRow label="Últimas Reuniões">
           {ultimasReunioes.length === 0
             ? "Nenhuma"

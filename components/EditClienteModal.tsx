@@ -1,7 +1,11 @@
-// Edição dos dados do cliente que moram no contrato: consultora, conselheiro(a)
-// e perfil/contexto. Consultora e perfil/contexto são os mesmos campos da
-// plataforma de mensalidades (editar aqui atualiza lá também); o conselheiro só
-// existe no INSIGHT.
+// Edição dos dados do cliente que moram no contrato: consultora responsável, conselheiro(a)
+// e perfil/contexto. Consultora e perfil/contexto são os mesmos campos da plataforma de
+// mensalidades (editar aqui atualiza lá também); o conselheiro só existe no INSIGHT.
+//
+// Permissões (o banco valida de verdade; aqui só evitamos oferecer o que vai falhar):
+// - admin edita tudo, inclusive definir a responsável de um cliente sem responsável;
+// - consultora só troca a responsável nos clientes dela, não pode deixar vazio, e confirma
+//   antes: o cliente e as reuniões futuras passam para outra pessoa e some da lista dela.
 "use client";
 
 import * as React from "react";
@@ -27,11 +31,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useIdentidade } from "@/lib/auth-context";
 import type { CamposContratoInsight } from "@/lib/contratos";
 import { mensagemDeErro } from "@/lib/reunioes";
 import type { ClienteCRM, Consultora, Contrato } from "@/lib/types";
 
-// Radix Select não aceita value="" — este valor representa "sem consultora".
+// Radix Select não aceita value="" — este valor representa "sem responsável".
 const SEM_CONSULTORA = "__sem_consultora__";
 
 interface EditClienteModalProps {
@@ -85,12 +90,21 @@ function EditClienteForm({
   onSalvar,
   onFechar,
 }: EditClienteFormProps) {
+  const { ehAdmin, consultoraId: minhaConsultoraId } = useIdentidade();
+
   const [consultoraId, setConsultoraId] = React.useState(
     contrato.consultora_id ?? SEM_CONSULTORA,
   );
   const [conselheiro, setConselheiro] = React.useState(contrato.conselheiro ?? "");
   const [contexto, setContexto] = React.useState(contrato.contexto_perfil_cliente ?? "");
   const [salvando, setSalvando] = React.useState(false);
+  const [confirmando, setConfirmando] = React.useState(false);
+
+  // A consultora só mexe na responsável dos clientes dela; o admin, em todos.
+  const podeTrocarResponsavel =
+    ehAdmin ||
+    (minhaConsultoraId !== null && contrato.consultora_id === minhaConsultoraId);
+  const semResponsavel = !contrato.consultora_id;
 
   // Só manda o que mudou, pra não sobrescrever edição feita ao mesmo tempo na plataforma.
   const campos: CamposContratoInsight = {};
@@ -104,18 +118,61 @@ function EditClienteForm({
   }
   const houveMudanca = Object.keys(campos).length > 0;
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!houveMudanca) return;
+  // Consultora trocando a responsável: o cliente sai da carteira dela — pede confirmação.
+  const precisaConfirmar = !ehAdmin && campos.consultora_id !== undefined;
+  const nomeNovaConsultora = consultoras.find((c) => c.id === novaConsultora)?.nome ?? "";
+
+  async function executarSalvar() {
     setSalvando(true);
     try {
       await onSalvar(contrato.id, campos);
       onFechar();
     } catch (erro) {
-      toast.error(`Erro ao salvar dados do cliente: ${mensagemDeErro(erro)}`);
+      // A RPC devolve o motivo em português em error.message (ex.: sem permissão).
+      toast.error(mensagemDeErro(erro));
+      setConfirmando(false);
     } finally {
       setSalvando(false);
     }
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!houveMudanca) return;
+    if (precisaConfirmar) {
+      setConfirmando(true);
+      return;
+    }
+    void executarSalvar();
+  }
+
+  if (confirmando) {
+    return (
+      <div>
+        <DialogHeader>
+          <DialogTitle>Confirmar troca de responsável</DialogTitle>
+          <DialogDescription>{cliente.nome_razao_social}</DialogDescription>
+        </DialogHeader>
+        <p className="py-4 text-sm">
+          Este cliente e suas reuniões futuras passarão para <strong>{nomeNovaConsultora}</strong>.
+          Você deixará de vê-lo.
+        </p>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={salvando}
+            onClick={() => setConfirmando(false)}
+          >
+            Voltar
+          </Button>
+          <Button type="button" disabled={salvando} onClick={() => void executarSalvar()}>
+            {salvando && <Loader2 className="size-4 animate-spin" />}
+            {salvando ? "Salvando..." : "Confirmar"}
+          </Button>
+        </DialogFooter>
+      </div>
+    );
   }
 
   return (
@@ -127,13 +184,18 @@ function EditClienteForm({
 
       <div className="grid gap-4 py-4">
         <div className="grid gap-2">
-          <Label htmlFor="edit-consultora">Consultora</Label>
-          <Select value={consultoraId} onValueChange={setConsultoraId}>
+          <Label htmlFor="edit-consultora">Consultora responsável</Label>
+          <Select
+            value={consultoraId}
+            onValueChange={setConsultoraId}
+            disabled={!podeTrocarResponsavel}
+          >
             <SelectTrigger id="edit-consultora" className="w-full border-brand-blue/40">
-              <SelectValue />
+              <SelectValue placeholder={semResponsavel ? "Definir responsável" : undefined} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={SEM_CONSULTORA}>Sem consultora</SelectItem>
+              {/* Só o admin pode deixar o cliente sem responsável; a consultora não. */}
+              {ehAdmin && <SelectItem value={SEM_CONSULTORA}>Sem responsável</SelectItem>}
               {consultoras.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   {c.nome}
@@ -141,7 +203,11 @@ function EditClienteForm({
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">Sincronizado com a plataforma.</p>
+          <p className="text-xs text-muted-foreground">
+            {podeTrocarResponsavel
+              ? "Sincronizado com a plataforma. Trocar a responsável também move o agendamento fixo e as reuniões futuras do cliente."
+              : "Só a consultora responsável (ou um administrador) pode trocar a responsável deste cliente."}
+          </p>
         </div>
 
         <div className="grid gap-2">
